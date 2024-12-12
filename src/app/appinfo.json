@@ -1,7 +1,7 @@
 {
   "id": "com.pirate.refresh",
   "version": "1.0.0",
-  "vendor": "My Company",
+  "vendor": "Lucifers Circle",
   "type": "web",
   "main": "index.html",
   "title": "Auto Token Refresh",
