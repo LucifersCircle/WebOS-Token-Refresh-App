@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebOS Dev Mode Token</title>
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #000000;
+        font-family: 'Arial', sans-serif;
+        color: #ffffff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    #container {
+        text-align: center;
+        max-width: 600px;
+        padding: 20px;
+        border-radius: 15px;
+        background-color: #3b3b5d;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
+    }
+    header h1 {
+        font-size: 2em;
+        margin-bottom: 20px;
+        color: #EFBF04;
+    }
+    section {
+        margin: 50px 0;
+    }
+    #token-section {
+        font-size: 1.1em;
+        margin-bottom: 10px;
+        color: #ffffff;
+    }
+    code {
+        display: inline-block;
+        background-color: #2b2b40;
+        color: #ffffff;
+        padding: 10px;
+        border-radius: 10px;
+        font-size: 1.1em;
+        max-width: 100%;
+        overflow-wrap: break-word;
+        margin: 1px 0;
+        white-space: pre-wrap;
+    }
+    code .path {
+        color: #00ff00;
+    }
+    code .token {
+        color: #00ff00;
+    }
+    #button-container {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+    }
+    button {
+        background: linear-gradient(to bottom, #444, #222);
+        border: 2px solid #c78bff;
+        border-radius: 5px;
+        padding: 10px 20px;
+        color: #ffffff;
+        font-size: 1.0em;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    button:hover {
+        background: linear-gradient(to bottom, #555, #333);
+        transform: scale(1.05);
+        box-shadow: 0px 4px 8px rgba(199, 139, 255, 0.4);
+    }
+    footer {
+        margin-top: 20px;
+        font-size: 0.9em;
+        color: #888;
+    }
+    footer p {
+        margin: 0;
+    }
+</style>
+</head>
+
+<script src="webOSTVjs-1.2.10/webOSTV.js"></script>
+
+<script>
+	function fetchToken() {
+	    const tokenPath = "/var/luna/preferences/devmode_enabled";
+	    const tokenElement = document.getElementById("token");
+	    tokenElement.innerHTML = `Fetching token from <span class="path">${tokenPath}</span>`;
+
+	    webOS.service.request("luna://com.pirate.refresh.service", {
+	        method: "readFile",
+	        onSuccess: function (response) {
+	            if (!response.returnValue) {
+	                return console.error("Failed to read token:", response.errorText);
+	            }
+	            console.log("Token received:", response.content);
+	            window.token = response.content.trim(); // Store token globally
+	            displayToken(window.token);
+	        },
+	        onFailure: function (error) {
+	            console.error("Service call failed:", error);
+	        }
+	    });
+	}
+
+
+    function displayToken(token) {
+        const tokenElement = document.getElementById("token");
+        tokenElement.innerHTML = `<span class="token">${token}</span>`;
+    }
+
+    function createPayload(action) {
+        if (!window.token) {
+            alert("Token not available!");
+            return null;
+        }
+        return new URLSearchParams({
+            key: window.token,
+            action: action
+        }).toString();
+    }
+
+    async function sendRequest(action) {
+        const payload = createPayload(action);
+        if (!payload) return;
+
+        const url = "https://lg.pirate.vodka";
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: payload
+            });
+            const json = await response.json();
+            displayResponse(json);
+        } catch (error) {
+            console.error("Error during request:", error);
+            displayResponse({ error: `Failed to ${action} token` });
+        }
+    }
+
+    function renewToken() {
+        sendRequest("add");
+    }
+
+    function removeToken() {
+        sendRequest("remove");
+    }
+
+	function displayResponse(response) {
+	    const responseElement = document.getElementById("response");
+
+	    if (response.error) {
+	        responseElement.textContent = response.error;
+	        responseElement.style.color = "red";
+	    } else if (response.message) {
+	        responseElement.textContent = response.message;
+	        responseElement.style.color = "#00ff00";
+	    } else {
+	        responseElement.textContent = JSON.stringify(response, null, 2);
+	        responseElement.style.color = "#ffffff"; // Default to white
+	    }
+	}
+
+    // Fetch token on page load
+    window.onload = fetchToken;
+</script>
+
+<body>
+    <div id="container">
+        <header>
+            <h1>Automatic WebOS Token Refresh</h1>
+        </header>
+        <main>
+            <section id="token-section">
+                <p>Your token is:</p>
+                <code id="token">Fetching token from /var/luna/preferences/devmode_enabled</code>
+            </section>
+            <section id="actions-section">
+                <p>Would you like to manage your token?</p>
+                <div id="button-container">
+                    <button onclick="renewToken()">Renew Automatically</button>
+                    <button onclick="removeToken()">Stop Auto Renewal</button>
+                </div>
+            </section>
+            <section id="response-section">
+                <p>Server Response:</p>
+                <code id="response">Waiting for action</code>
+            </section>
+            <section>			
+            	<p>After selecting "Renew Automatically", you can uninstall this app. Your token will continue to be refreshed automatically.</p>
+            </section>
+        </main>
+        <footer>
+            <p>Powered by <a href="https://lg.pirate.vodka">lg.pirate.vodka</a></p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "id": "com.pirate.refresh",
+  "version": "1.0.0",
+  "vendor": "My Company",
+  "type": "web",
+  "main": "index.html",
+  "title": "Auto Token Refresh",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "com.pirate.refresh.service",
+  "description": "Service for grabbing dev mode token.",
+  "services": [
+    {
+      "name": "com.pirate.refresh.service"
+    }
+  ]
+}
