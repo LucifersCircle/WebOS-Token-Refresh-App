@@ -1,0 +1,15 @@
+{
+  "id": "com.pirate.refresh",
+  "version": "1.0.0",
+  "type": "web",
+  "title": "Auto Token Refresh",
+  "iconUri": "https://github.com/LucifersCircle/WebOS-Token-Refresh-App/blob/main/img/Screenshot%202024-12-12%20142711.png?raw=true",
+  "sourceUrl": "https://github.com/LucifersCircle/WebOS-Token-Refresh-App/raw/refs/heads/main/src/com.pirate.refresh_1.0.0_all.ipk",
+  "rootRequired": false,
+  "ipkUrl": "com.pirate.refresh_1.0.0_all.ipk",
+  "ipkHash": {
+    "sha256": "0233d5cff795f21ba296485994ef02bc2c32c97fb30400633b7844f1170af75e"
+  },
+  "ipkSize": 104982,
+  "installedSize": 135684
+}
