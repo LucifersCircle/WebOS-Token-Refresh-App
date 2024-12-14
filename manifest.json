@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "type": "web",
   "title": "Auto Token Refresh",
-  "iconUri": "https://github.com/LucifersCircle/WebOS-Token-Refresh-App/blob/main/img/Screenshot%202024-12-12%20142711.png?raw=true",
-  "sourceUrl": "https://github.com/LucifersCircle/WebOS-Token-Refresh-App/raw/refs/heads/main/src/com.pirate.refresh_1.0.0_all.ipk",
+  "iconUri": "https://raw.githubusercontent.com/LucifersCircle/WebOS-Token-Refresh-App/df2ddd0d429e86b024777f9be762e242e8eb1106/src/app/icon.png",
+  "sourceUrl": "/src/com.pirate.refresh_1.0.0_all.ipk",
   "rootRequired": false,
   "ipkUrl": "com.pirate.refresh_1.0.0_all.ipk",
   "ipkHash": {
