@@ -1,0 +1,58 @@
+name: Build and Release IPK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up Node.js for ares-cli
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.18.0'
+
+      # Install ares-cli
+      - name: Install ares-cli
+        run: |
+          npm install -g @webosose/ares-cli
+
+      # Build IPK package
+      - name: Build IPK
+        run: |
+          ares-package ./src/app ./src/service
+
+      # Extract version from appinfo.json
+      - name: Get version
+        id: version
+        run: |
+          version=$(jq -r '.version' src/app/appinfo.json)
+          echo "VERSION=$version" >> $GITHUB_ENV
+
+      # Create release
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ env.VERSION }}
+          release_name: WebOS Token Refresh v${{ env.VERSION }}
+          draft: false
+          prerelease: false
+
+      # Upload the IPK to the release
+      - name: Upload IPK to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./com.pirate.refresh_${{ env.VERSION }}_all.ipk
+          asset_name: com.pirate.refresh_${{ env.VERSION }}_all.ipk
+          asset_content_type: application/octet-stream
