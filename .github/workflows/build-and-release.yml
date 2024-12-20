@@ -46,7 +46,7 @@ jobs:
         run: |
           ./manifest-tool/usr/bin/webosbrew-gen-manifest \
             --pkgfile ./com.pirate.refresh_${{ env.VERSION }}_all.ipk \
-            --icon https://raw.githubusercontent.com/LucifersCircle/WebOS-Token-Refresh-App/main/src/app/icon.png \
+            --icon https://raw.githubusercontent.com/LucifersCircle/WebOS-Token-Refresh-App/df2ddd0d429e86b024777f9be762e242e8eb1106/src/app/icon.png \
             --link https://github.com/LucifersCircle/WebOS-Token-Refresh-App/releases/download/v${{ env.VERSION }}/com.pirate.refresh_${{ env.VERSION }}_all.ipk \
             --output manifest.json \
             --root false \
