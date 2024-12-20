@@ -1,4 +1,4 @@
-name: Build and Release IPK
+name: Build, Generate Manifest, and Release IPK
 
 on:
   workflow_dispatch:
@@ -22,6 +22,13 @@ jobs:
         run: |
           npm install -g @webosose/ares-cli
 
+      # Download and install manifest generator
+      - name: Download and install manifest generator
+        run: |
+          wget https://github.com/webosbrew/dev-toolbox-cli/releases/download/v20241107-10c727a/webosbrew-toolbox-gen-manifest_0.1.4-1_amd64.deb
+          dpkg-deb -x webosbrew-toolbox-gen-manifest_0.1.4-1_amd64.deb manifest-tool
+          chmod +x manifest-tool/usr/bin/webosbrew-gen-manifest
+
       # Build IPK package
       - name: Build IPK
         run: |
@@ -33,6 +40,17 @@ jobs:
         run: |
           version=$(jq -r '.version' src/app/appinfo.json)
           echo "VERSION=$version" >> $GITHUB_ENV
+
+      # Generate manifest.json
+      - name: Generate manifest.json
+        run: |
+          ./manifest-tool/usr/bin/webosbrew-gen-manifest \
+            --pkgfile ./com.pirate.refresh_${{ env.VERSION }}_all.ipk \
+            --icon https://raw.githubusercontent.com/LucifersCircle/WebOS-Token-Refresh-App/main/src/app/icon.png \
+            --link https://github.com/LucifersCircle/WebOS-Token-Refresh-App/releases/download/v${{ env.VERSION }}/com.pirate.refresh_${{ env.VERSION }}_all.ipk \
+            --output manifest.json \
+            --root false \
+            --verbose
 
       # Create release
       - name: Create GitHub Release
@@ -56,3 +74,14 @@ jobs:
           asset_path: ./com.pirate.refresh_${{ env.VERSION }}_all.ipk
           asset_name: com.pirate.refresh_${{ env.VERSION }}_all.ipk
           asset_content_type: application/octet-stream
+
+      # Upload manifest.json to the release
+      - name: Upload manifest.json to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./manifest.json
+          asset_name: manifest.json
+          asset_content_type: application/json
