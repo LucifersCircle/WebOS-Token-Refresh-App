@@ -2,207 +2,450 @@
 <html>
 <head>
     <title>WebOS Dev Mode Token</title>
-<style>
-    html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        background: #000000;
-        font-family: 'Arial', sans-serif;
-        color: #ffffff;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-    #container {
-        text-align: center;
-        max-width: 600px;
-        padding: 20px;
-        border-radius: 15px;
-        background-color: #3b3b5d;
-        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
-    }
-    header h1 {
-        font-size: 2em;
-        margin-bottom: 20px;
-        color: #EFBF04;
-    }
-    section {
-        margin: 50px 0;
-    }
-    #token-section {
-        font-size: 1.1em;
-        margin-bottom: 10px;
-        color: #ffffff;
-    }
-    code {
-        display: inline-block;
-        background-color: #2b2b40;
-        color: #ffffff;
-        padding: 10px;
-        border-radius: 10px;
-        font-size: 1.1em;
-        max-width: 100%;
-        overflow-wrap: break-word;
-        margin: 1px 0;
-        white-space: pre-wrap;
-    }
-    code .path {
-        color: #00ff00;
-    }
-    code .token {
-        color: #00ff00;
-    }
-    #button-container {
-        display: flex;
-        justify-content: center;
-        gap: 15px;
-    }
-    button {
-        background: linear-gradient(to bottom, #444, #222);
-        border: 2px solid #c78bff;
-        border-radius: 5px;
-        padding: 10px 20px;
-        color: #ffffff;
-        font-size: 1.0em;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    button:hover {
-        background: linear-gradient(to bottom, #555, #333);
-        transform: scale(1.05);
-        box-shadow: 0px 4px 8px rgba(199, 139, 255, 0.4);
-    }
-    footer {
-        margin-top: 20px;
-        font-size: 0.9em;
-        color: #888;
-    }
-    footer p {
-        margin: 0;
-    }
-</style>
+    <style>
+        /* 
+         * Full-screen flex container, column layout
+         * The main area is flexible, the log area has a toggleable height.
+         */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000000;
+            font-family: 'Arial', sans-serif;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 
+         * The #app-container is a column flex that fills the screen,
+         * containing the main content area (#main-content) and
+         * the log area (#log-section).
+         */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
+
+        /*
+         * The main content automatically expands or shrinks
+         * depending on the log section's height.
+         */
+        #main-content {
+            flex: 1;              /* Fill remaining space */
+            overflow-y: auto;     /* Scroll if content is tall */
+            display: flex;
+            flex-direction: column;
+            align-items: center;  /* Center horizontally */
+            text-align: center;
+        }
+
+        /* Header styling */
+        header {
+            margin-top: 5vh;
+        }
+        header h1 {
+            font-size: 4vw;
+            margin: 3vh 0 2vh 0;
+            color: #EFBF04;
+        }
+
+        /* Each section is spaced out vertically */
+        section {
+            margin: 3vh 0;
+            font-size: 2vw;
+            width: 90vw;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Code block styling */
+        code {
+            display: block;
+            background-color: #2b2b40;
+            color: #ffffff;
+            padding: 2vw;
+            border-radius: 1vw;
+            font-size: 2vw;
+            max-width: 90vw;
+            overflow-wrap: break-word;
+            white-space: pre-wrap;
+            margin: 1vh auto;
+        }
+        code .path {
+            color: #00ff00;
+        }
+        code .token {
+            color: #00ff00;
+        }
+        #token {
+          white-space: nowrap;
+          overflow-x: auto; /* allows scrolling */
+          scrollbar-width: none; /* Firefox */
+          -ms-overflow-style: none;  /* IE 10+ */
+        }
+
+        #token::-webkit-scrollbar {
+          display: none;  /* Chrome, Safari, Opera */
+        }
+
+        /* Button container styling */
+        #button-container {
+            display: flex;
+            justify-content: center;
+            gap: 4vw;
+            margin-top: 2vh;
+        }
+        button {
+            background: linear-gradient(to bottom, #444, #222);
+            border: 2px solid #c78bff;
+            border-radius: 1vw;
+            padding: 1vw 2vw;
+            color: #ffffff;
+            font-size: 2vw;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: linear-gradient(to bottom, #555, #333);
+            transform: scale(1.05);
+            box-shadow: 0px 4px 8px rgba(199, 139, 255, 0.4);
+        }
+        button:focus {
+            outline: 3px solid yellow !important;
+            box-shadow: 0px 0px 15px rgba(255, 255, 0, 0.8);
+        }
+
+        /* 
+         * The log section sits at the bottom of #app-container.
+         * By default, it's collapsed (height: 0).
+         * Toggling sets it to 20vh.
+         */
+        #log-section {
+            height: 0;
+            overflow-y: auto;
+            font-size: 1.8vw;
+            background-color: #2b2b40;
+            padding: 0 2vw; /* minimal side padding when collapsed */
+            transition: height 0.3s ease, padding 0.3s ease;
+        }
+        #log-section.expanded {
+            height: 20vh;         /* expand to 20% of screen height */
+            padding: 2vw;         /* restore full padding */
+        }
+
+        #log-section p {
+            margin: 0 0 1vh 0;
+            font-weight: bold;
+        }
+        #log-content p {
+            margin: 0.5vh 0;
+            line-height: 1.4;
+        }
+
+        /* Footer styling */
+        footer {
+            margin: 3vh 0;
+            font-size: 1.8vw;
+            color: #888;
+        }
+        footer p {
+            margin: 0;
+        }
+
+    </style>
 </head>
 
-<script src="webOSTVjs-1.2.10/webOSTV.js"></script>
-
-<script>
-	function fetchToken() {
-	    const tokenPath = "/var/luna/preferences/devmode_enabled";
-	    const tokenElement = document.getElementById("token");
-	    tokenElement.innerHTML = `Fetching token from <span class="path">${tokenPath}</span>`;
-
-	    webOS.service.request("luna://com.pirate.refresh.service", {
-	        method: "readFile",
-	        onSuccess: function (response) {
-	            if (!response.returnValue) {
-	                return console.error("Failed to read token:", response.errorText);
-	            }
-	            console.log("Token received:", response.content);
-	            window.token = response.content.trim(); // Store token globally
-	            displayToken(window.token);
-	        },
-	        onFailure: function (error) {
-	            console.error("Service call failed:", error);
-	        }
-	    });
-	}
-
-
-    function displayToken(token) {
-        const tokenElement = document.getElementById("token");
-        tokenElement.innerHTML = `<span class="token">${token}</span>`;
-    }
-
-    function createPayload(action) {
-        if (!window.token) {
-            alert("Token not available!");
-            return null;
-        }
-        return new URLSearchParams({
-            key: window.token,
-            action: action
-        }).toString();
-    }
-
-    async function sendRequest(action) {
-        const payload = createPayload(action);
-        if (!payload) return;
-
-        const url = "https://lg.pirate.vodka";
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Accept": "application/json",
-                    "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: payload
-            });
-            const json = await response.json();
-            displayResponse(json);
-        } catch (error) {
-            console.error("Error during request:", error);
-            displayResponse({ error: `Failed to ${action} token` });
-        }
-    }
-
-    function renewToken() {
-        sendRequest("add");
-    }
-
-    function removeToken() {
-        sendRequest("remove");
-    }
-
-	function displayResponse(response) {
-	    const responseElement = document.getElementById("response");
-
-	    if (response.error) {
-	        responseElement.textContent = response.error;
-	        responseElement.style.color = "red";
-	    } else if (response.message) {
-	        responseElement.textContent = response.message;
-	        responseElement.style.color = "#00ff00";
-	    } else {
-	        responseElement.textContent = JSON.stringify(response, null, 2);
-	        responseElement.style.color = "#ffffff"; // Default to white
-	    }
-	}
-
-    // Fetch token on page load
-    window.onload = fetchToken;
-</script>
-
 <body>
-    <div id="container">
-        <header>
-            <h1>Automatic WebOS Token Refresh</h1>
-        </header>
-        <main>
-            <section id="token-section">
-                <p>Your token is:</p>
-                <code id="token">Fetching token from /var/luna/preferences/devmode_enabled</code>
-            </section>
-            <section id="actions-section">
-                <p>Would you like to manage your token?</p>
-                <div id="button-container">
-                    <button onclick="renewToken()">Renew Automatically</button>
-                    <button onclick="removeToken()">Stop Auto Renewal</button>
-                </div>
-            </section>
-            <section id="response-section">
-                <p>Server Response:</p>
-                <code id="response">Waiting for action</code>
-            </section>
-            <section>			
-            	<p>After selecting "Renew Automatically", you can uninstall this app. Your token will continue to be refreshed automatically.</p>
-            </section>
-        </main>
-        <footer>
-            <p>Powered by <a href="https://lg.pirate.vodka">lg.pirate.vodka</a></p>
-        </footer>
+    <div id="app-container">
+        <!-- Main Content Area -->
+        <div id="main-content">
+            <header>
+                <h1>Automatic WebOS Token Refresh</h1>
+            </header>
+
+            <main>
+                <!-- Token Section -->
+                <section id="token-section">
+                    <p>Your token is:</p>
+                    <code id="token">Fetching token from /var/luna/preferences/devmode_enabled</code>
+                </section>
+
+                <!-- Action Buttons -->
+                <section id="actions-section">
+                    <p>Would you like to manage your token?</p>
+                    <div id="button-container">
+                        <button onclick="renewToken()">Renew Automatically</button>
+                        <button onclick="removeToken()">Stop Auto Renewal</button>
+                    </div>
+                </section>
+
+                <!-- Server Response -->
+                <section id="response-section">
+                    <p>Server Response:</p>
+                    <code id="response">Waiting for action</code>
+                </section>
+
+                <!-- Info Section -->
+                <section id="info-section">
+                    <p>After selecting "Renew Automatically", you can uninstall this app.<br>
+                       Your token will continue to be refreshed automatically.</p>
+                </section>
+
+                <!-- Toggle Log Button -->
+                <section id="toggle-log-section">
+                    <button id="toggle-log-btn" onclick="toggleLog()">Show Log</button>
+                </section>
+            </main>
+
+            <!-- Footer -->
+            <footer>
+                <p>Powered by <a href="https://lg.pirate.vodka" target="_blank">lg.pirate.vodka</a></p>
+            </footer>
+        </div>
+
+        <!-- Log Section (collapsible) -->
+        <section id="log-section">
+            <p>App Log:</p>
+            <div id="log-content"></div>
+        </section>
     </div>
+
+    <!-- WebOS JS Library -->
+    <script src="webOSTVjs-1.2.10/webOSTV.js"></script>
+
+    <!-- Token & Service Logic -->
+    <script>
+        // Log events to the App Log section
+        function logEvent(message) {
+            const logContent = document.getElementById("log-content");
+            const timeStamp = new Date().toLocaleTimeString();
+            logContent.innerHTML += `<p>[${timeStamp}] ${message}</p>`;
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+
+        function toggleLog() {
+            const logSection = document.getElementById("log-section");
+            const toggleBtn = document.getElementById("toggle-log-btn");
+            const mainContent = document.getElementById("main-content");
+
+            if (logSection.classList.contains("expanded")) {
+                // Collapse log
+                logSection.classList.remove("expanded");
+                toggleBtn.textContent = "Show Log";
+                // After the transition, scroll main content to the top
+                setTimeout(() => {
+                    mainContent.scrollTop = 0;
+                    toggleBtn.focus();
+                }, 350);
+            } else {
+                // Expand log
+                logSection.classList.add("expanded");
+                toggleBtn.textContent = "Hide Log";
+                // After the transition, scroll main content to the bottom
+                setTimeout(() => {
+                    mainContent.scrollTop = mainContent.scrollHeight;
+                    toggleBtn.focus();
+                }, 350);
+            }
+        }
+
+        function fetchToken() {
+            const tokenPath = "/var/luna/preferences/devmode_enabled";
+            const tokenElement = document.getElementById("token");
+            tokenElement.innerHTML = `Fetching token from <span class="path">${tokenPath}</span>`;
+            logEvent("Starting token fetch...");
+
+            webOS.service.request("luna://com.pirate.refresh.service", {
+                method: "readFile",
+                onSuccess: function (response) {
+                    if (!response.returnValue) {
+                        logEvent("Failed to read token: " + response.errorText);
+                        return console.error("Failed to read token:", response.errorText);
+                    }
+                    logEvent("Token retrieved successfully.");
+                    console.log("Token received:", response.content);
+                    window.token = response.content.trim();
+                    displayToken(window.token);
+                },
+                onFailure: function (error) {
+                    logEvent("Error fetching token: " + error.message);
+                    console.error("Service call failed:", error);
+                }
+            });
+        }
+
+        function displayToken(token) {
+            const tokenElement = document.getElementById("token");
+            tokenElement.innerHTML = `<span class="token">${token}</span>`;
+        }
+
+        function createPayload(action) {
+            if (!window.token) {
+                alert("Token not available!");
+                return null;
+            }
+            return new URLSearchParams({
+                key: window.token,
+                action: action
+            }).toString();
+        }
+
+        async function sendRequest(action) {
+            logEvent("Sending request for action: " + action);
+            const payload = createPayload(action);
+            if (!payload) return;
+
+            const url = "https://lg.pirate.vodka";
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                        "Accept": "application/json",
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    body: payload
+                });
+                const json = await response.json();
+                logEvent("Server response received for action: " + action + ": " + JSON.stringify(json));
+                displayResponse(json);
+            } catch (error) {
+                logEvent("Error during request for action " + action + ": " + error.message);
+                console.error("Error during request:", error);
+                displayResponse({ error: `Failed to ${action} token` });
+            }
+        }
+
+        function renewToken() {
+            sendRequest("add");
+        }
+
+        function removeToken() {
+            sendRequest("remove");
+        }
+
+        function displayResponse(response) {
+            const responseElement = document.getElementById("response");
+            if (response.error) {
+                responseElement.textContent = response.error;
+                responseElement.style.color = "red";
+            } else if (response.message) {
+                responseElement.textContent = response.message;
+                responseElement.style.color = "#00ff00";
+            } else {
+                responseElement.textContent = JSON.stringify(response, null, 2);
+                responseElement.style.color = "#ffffff";
+            }
+        }
+
+        // Fetch token on page load
+        window.onload = fetchToken;
+    </script>
+
+    <!-- Remote Navigation & Focus Logic -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            let buttons = document.querySelectorAll("button");
+            let currentIndex = 0;
+            let usingPointer = false;
+            let pointerTimeout;
+
+            function setInitialFocus() {
+                if (buttons.length > 0) {
+                    console.log("Setting initial focus...");
+                    buttons[currentIndex].setAttribute("tabindex", "0");
+                    buttons[currentIndex].setAttribute("focusable", "true");
+                    buttons[currentIndex].focus();
+                    buttons[currentIndex].classList.add("focused");
+
+                    setTimeout(() => {
+                        if (document.activeElement !== buttons[currentIndex]) {
+                            console.log("Retrying focus...");
+                            buttons[currentIndex].focus();
+                        }
+                    }, 100);
+                }
+            }
+
+            setTimeout(setInitialFocus, 500);
+
+            document.addEventListener("mousemove", function () {
+                usingPointer = true;
+                clearTimeout(pointerTimeout);
+                pointerTimeout = setTimeout(() => usingPointer = false, 1000);
+            });
+
+            function handleKeyPress(event) {
+                let keyCode = event.keyCode || event.which;
+                let isLeft = keyCode === 37;
+                let isRight = keyCode === 39;
+                let isEnter = keyCode === 13;
+                
+                if (!isLeft && !isRight && !isEnter) return;
+                usingPointer = false;
+                
+                // Remove focus from the current button
+                buttons[currentIndex].classList.remove("focused");
+                
+                if (isRight) {
+                    currentIndex = (currentIndex + 1) % buttons.length;
+                } else if (isLeft) {
+                    currentIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+                } else if (isEnter) {
+                    // Prevent any default actions that might trigger another click
+                    event.preventDefault();
+                    event.stopPropagation();
+                    buttons[currentIndex].click();
+                }
+                
+                // Add focus to the new button
+                buttons[currentIndex].classList.add("focused");
+                buttons[currentIndex].focus();
+            }
+
+
+            document.addEventListener("keydown", handleKeyPress);
+
+            buttons.forEach((button, index) => {
+                button.addEventListener("mouseenter", function () {
+                    if (!usingPointer) return;
+                    buttons[currentIndex].classList.remove("focused");
+                    currentIndex = index;
+                    button.classList.add("focused");
+                });
+
+            });
+
+            if (window.webOS && webOS.platformBack) {
+                console.log("webOS detected: enabling platformBack()");
+                webOS.platformBack = function () {
+                    console.log("Back button pressed.");
+                };
+            }
+        });
+    </script>
+
+    <!-- Listener for scrolling log -->
+    <script>
+        document.addEventListener("keydown", function(e) {
+            const logSection = document.getElementById("log-section");
+            // Only handle up/down if log section is expanded
+            if (logSection.classList.contains("expanded")) {
+                if (e.keyCode === 38) { // Up arrow
+                    logSection.scrollTop -= 20; // Adjust scrolling delta as needed
+                    e.preventDefault();
+                } else if (e.keyCode === 40) { // Down arrow
+                    logSection.scrollTop += 20;
+                    e.preventDefault();
+                }
+            }
+        });
+
+    </script>
 </body>
 </html>
