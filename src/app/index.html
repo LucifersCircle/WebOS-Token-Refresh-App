@@ -36,11 +36,11 @@
          * depending on the log section's height.
          */
         #main-content {
-            flex: 1;              /* Fill remaining space */
-            overflow-y: auto;     /* Scroll if content is tall */
+            flex: 1;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            align-items: center;  /* Center horizontally */
+            align-items: center;
             text-align: center;
         }
 
@@ -85,13 +85,13 @@
         }
         #token {
           white-space: nowrap;
-          overflow-x: auto; /* allows scrolling */
-          scrollbar-width: none; /* Firefox */
-          -ms-overflow-style: none;  /* IE 10+ */
+          overflow-x: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
 
         #token::-webkit-scrollbar {
-          display: none;  /* Chrome, Safari, Opera */
+          display: none;
         }
 
         /* Button container styling */
@@ -131,12 +131,12 @@
             overflow-y: auto;
             font-size: 1.8vw;
             background-color: #2b2b40;
-            padding: 0 2vw; /* minimal side padding when collapsed */
+            padding: 0 2vw;
             transition: height 0.3s ease, padding 0.3s ease;
         }
         #log-section.expanded {
-            height: 20vh;         /* expand to 20% of screen height */
-            padding: 2vw;         /* restore full padding */
+            height: 20vh;
+            padding: 2vw;
         }
 
         #log-section p {
@@ -157,7 +157,6 @@
         footer p {
             margin: 0;
         }
-
     </style>
 </head>
 
@@ -216,38 +215,80 @@
         </section>
     </div>
 
-    <!-- WebOS JS Library -->
-    <script src="webOSTVjs-1.2.10/webOSTV.js"></script>
+    <!-- Early Log Event Definition -->
+    <script>
+      // Define logEvent early so it is available for the dynamic library switching code.
+      function logEvent(message) {
+          const logContent = document.getElementById("log-content");
+          const timeStamp = new Date().toLocaleTimeString();
+          if (logContent) {
+              logContent.innerHTML += `<p>[${timeStamp}] ${message}</p>`;
+              logContent.scrollTop = logContent.scrollHeight;
+          } else {
+              console.log("LogEvent:", message);
+          }
+      }
+    </script>
+
+    <!-- Try dynamic library switching for compatibility with webOS 3 and under -->
+    <script>
+      (function() {
+        function loadWebOSLibrary() {
+          var script = document.createElement('script');
+          var isLegacy = false;
+          var deviceVersion = "unknown";
+          
+          if (window.PalmSystem) {
+            // Log the raw deviceInfo value (if it exists)
+            if (window.PalmSystem.deviceInfo) {
+              logEvent("Raw deviceInfo: " + window.PalmSystem.deviceInfo);
+            } else {
+              logEvent("window.PalmSystem exists but no deviceInfo property found.");
+            }
+            
+            try {
+              var deviceInfo = JSON.parse(window.PalmSystem.deviceInfo || '{}');
+              deviceVersion = deviceInfo.platformVersionMajor || "unknown";
+              // Check if the major version is less than 4.
+              if (deviceInfo.platformVersionMajor && parseInt(deviceInfo.platformVersionMajor, 10) < 4) {
+                isLegacy = true;
+              }
+            } catch (e) {
+              console.error('Error reading deviceInfo:', e);
+              logEvent("Error reading deviceInfo: " + e.message);
+            }
+          } else {
+            logEvent("window.PalmSystem not found.");
+          }
+          
+          // Log which library will be loaded.
+          logEvent("Loading " + (isLegacy ? "webOSTV-dev.js" : "webOSTV.js") + " (webOS version: " + deviceVersion + ")");
+          
+          // Choose the legacy or current library.
+          script.src = isLegacy ? 'webOSTVjs-1.2.11/webOSTV-dev.js' : 'webOSTVjs-1.2.11/webOSTV.js';
+          document.head.appendChild(script);
+        }
+        loadWebOSLibrary();
+      })();
+    </script>
 
     <!-- Token & Service Logic -->
     <script>
-        // Log events to the App Log section
-        function logEvent(message) {
-            const logContent = document.getElementById("log-content");
-            const timeStamp = new Date().toLocaleTimeString();
-            logContent.innerHTML += `<p>[${timeStamp}] ${message}</p>`;
-            logContent.scrollTop = logContent.scrollHeight;
-        }
-
         function toggleLog() {
             const logSection = document.getElementById("log-section");
             const toggleBtn = document.getElementById("toggle-log-btn");
             const mainContent = document.getElementById("main-content");
 
             if (logSection.classList.contains("expanded")) {
-                // Collapse log
                 logSection.classList.remove("expanded");
                 toggleBtn.textContent = "Show Log";
-                // After the transition, scroll main content to the top
                 setTimeout(() => {
                     mainContent.scrollTop = 0;
                     toggleBtn.focus();
                 }, 350);
             } else {
-                // Expand log
                 logSection.classList.add("expanded");
                 toggleBtn.textContent = "Hide Log";
-                // After the transition, scroll main content to the bottom
                 setTimeout(() => {
                     mainContent.scrollTop = mainContent.scrollHeight;
                     toggleBtn.focus();
@@ -397,7 +438,6 @@
                 } else if (isLeft) {
                     currentIndex = (currentIndex - 1 + buttons.length) % buttons.length;
                 } else if (isEnter) {
-                    // Prevent any default actions that might trigger another click
                     event.preventDefault();
                     event.stopPropagation();
                     buttons[currentIndex].click();
@@ -408,7 +448,6 @@
                 buttons[currentIndex].focus();
             }
 
-
             document.addEventListener("keydown", handleKeyPress);
 
             buttons.forEach((button, index) => {
@@ -418,7 +457,6 @@
                     currentIndex = index;
                     button.classList.add("focused");
                 });
-
             });
 
             if (window.webOS && webOS.platformBack) {
@@ -434,18 +472,16 @@
     <script>
         document.addEventListener("keydown", function(e) {
             const logSection = document.getElementById("log-section");
-            // Only handle up/down if log section is expanded
             if (logSection.classList.contains("expanded")) {
-                if (e.keyCode === 38) { // Up arrow
-                    logSection.scrollTop -= 20; // Adjust scrolling delta as needed
+                if (e.keyCode === 38) {
+                    logSection.scrollTop -= 20;
                     e.preventDefault();
-                } else if (e.keyCode === 40) { // Down arrow
+                } else if (e.keyCode === 40) {
                     logSection.scrollTop += 20;
                     e.preventDefault();
                 }
             }
         });
-
     </script>
 </body>
 </html>
