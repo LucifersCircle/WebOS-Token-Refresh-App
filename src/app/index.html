@@ -239,7 +239,6 @@
           var deviceVersion = "unknown";
           
           if (window.PalmSystem) {
-            // Log the raw deviceInfo value (if it exists)
             if (window.PalmSystem.deviceInfo) {
               logEvent("Raw deviceInfo: " + window.PalmSystem.deviceInfo);
             } else {
@@ -249,7 +248,6 @@
             try {
               var deviceInfo = JSON.parse(window.PalmSystem.deviceInfo || '{}');
               deviceVersion = deviceInfo.platformVersionMajor || "unknown";
-              // Check if the major version is less than 4.
               if (deviceInfo.platformVersionMajor && parseInt(deviceInfo.platformVersionMajor, 10) < 4) {
                 isLegacy = true;
               }
@@ -261,11 +259,19 @@
             logEvent("window.PalmSystem not found.");
           }
           
-          // Log which library will be loaded.
-          logEvent("Loading " + (isLegacy ? "webOSTV-dev.js" : "webOSTV.js") + " (webOS version: " + deviceVersion + ")");
+          logEvent("Loading " + (isLegacy ? "webOS.js" : "webOSTV.js") + " (webOS version: " + deviceVersion + ")");
+          script.src = isLegacy ? 'webOSjs-0.1.0/webOS.js' : 'webOSTVjs-1.2.11/webOSTV.js';
           
-          // Choose the legacy or current library.
-          script.src = isLegacy ? 'webOSTVjs-1.2.11/webOSTV-dev.js' : 'webOSTVjs-1.2.11/webOSTV.js';
+          script.onload = function() {
+              logEvent("Library loaded successfully.");
+              fetchToken();
+          };
+          
+          script.onerror = function() {
+              logEvent("Error loading library; proceeding to fetch token anyway.");
+              fetchToken();
+          };
+          
           document.head.appendChild(script);
         }
         loadWebOSLibrary();
@@ -302,24 +308,45 @@
             tokenElement.innerHTML = `Fetching token from <span class="path">${tokenPath}</span>`;
             logEvent("Starting token fetch...");
 
-            webOS.service.request("luna://com.pirate.refresh.service", {
-                method: "readFile",
-                onSuccess: function (response) {
-                    if (!response.returnValue) {
-                        logEvent("Failed to read token: " + response.errorText);
-                        return console.error("Failed to read token:", response.errorText);
+            // Set a timeout to catch cases where no response arrives (e.g., in the simulator)
+            let tokenFetchTimeout = setTimeout(function() {
+                logEvent("Token fetch timed out.");
+                tokenElement.innerHTML = `<span class="token">Token fetch timed out.</span>`;
+            }, 5000); // 5 seconds timeout
+
+            try {
+                webOS.service.request("luna://com.pirate.refresh.service", {
+                    method: "readFile",
+                    onSuccess: function (response) {
+                        // Clear the timeout as we got a response
+                        clearTimeout(tokenFetchTimeout);
+                        // Note: Luna service on webOS often calls onSuccess even if an error occurred.
+                        if (!response.returnValue) {
+                            logEvent("Failed to read token: " + response.errorText);
+                            tokenElement.innerHTML = `<span class="token">Error: ${response.errorText}</span>`;
+                            return console.error("Failed to read token:", response.errorText);
+                        }
+                        logEvent("Token retrieved successfully.");
+                        console.log("Token received:", response.content);
+                        window.token = response.content.trim();
+                        displayToken(window.token);
+                    },
+                    onFailure: function (error) {
+                        // Clear the timeout if onFailure is triggered
+                        clearTimeout(tokenFetchTimeout);
+                        logEvent("Error fetching token: " + error.message);
+                        tokenElement.innerHTML = `<span class="token">Error fetching token.</span>`;
+                        console.error("Service call failed:", error);
                     }
-                    logEvent("Token retrieved successfully.");
-                    console.log("Token received:", response.content);
-                    window.token = response.content.trim();
-                    displayToken(window.token);
-                },
-                onFailure: function (error) {
-                    logEvent("Error fetching token: " + error.message);
-                    console.error("Service call failed:", error);
-                }
-            });
+                });
+            } catch (err) {
+                clearTimeout(tokenFetchTimeout);
+                logEvent("Exception during token fetch: " + err.message);
+                tokenElement.innerHTML = `<span class="token">Exception fetching token.</span>`;
+                console.error("Exception during token fetch:", err);
+            }
         }
+
 
         function displayToken(token) {
             const tokenElement = document.getElementById("token");
@@ -384,8 +411,6 @@
             }
         }
 
-        // Fetch token on page load
-        window.onload = fetchToken;
     </script>
 
     <!-- Remote Navigation & Focus Logic -->
