@@ -194,6 +194,7 @@ async function showNativeDialog(view, result) {
             else buttons.push(alertButton('Check Again', { view: 'status' }, true));
             buttons.push(alertButton('Show Log', { view: 'log' }));
         }
+        buttons.push(alertButton('Dismiss', { view: 'dismiss' }));
         var response = await nativeAlerts.request('createAlert', {
             title: title, message: message, modal: true, buttons: buttons
         });
@@ -226,10 +227,17 @@ async function showNativeDialog(view, result) {
 function closeNativeAlert() {
     nativeAlertGeneration++;
     nativeAlertPending = false;
-    if (!nativeAlertId) return;
+    if (!nativeAlertId) return Promise.resolve();
     var alertId = nativeAlertId;
     nativeAlertId = null;
-    nativeAlerts.closeAlert(alertId).catch(function (error) { logEvent('System alert close: ' + error.message); });
+    return nativeAlerts.closeAlert(alertId).catch(function (error) { logEvent('System alert close: ' + error.message); });
+}
+
+function dismissApp() {
+    nativeAlertAvailable = false;
+    nativeView = 'dismiss';
+    pendingLaunch = null;
+    return closeNativeAlert().then(function () { window.close(); });
 }
 
 function retryNativeAlert() {
@@ -353,6 +361,7 @@ function readLaunchParams(event) {
 }
 
 function handleLaunch(params) {
+    if (params.view === 'dismiss') { dismissApp(); return; }
     if (params.tokenAction !== 'add' && params.tokenAction !== 'remove' && params.view !== 'log' && params.view !== 'status') return;
     if (params.view === 'log') { showNativeLog(); return; }
     nativeView = 'status';
@@ -410,11 +419,15 @@ Array.prototype.forEach.call(document.querySelectorAll('button'), function (butt
 });
 
 pendingLaunch = readLaunchParams();
-if (!pendingLaunch.tokenAction && pendingLaunch.view !== 'log' && pendingLaunch.view !== 'status') pendingLaunch = null;
-renderRegistration();
-focusButton();
-if (pendingLaunch && pendingLaunch.view === 'log') {
-    handleLaunch(pendingLaunch);
-    pendingLaunch = null;
+if (pendingLaunch.view === 'dismiss') {
+    dismissApp();
+} else {
+    if (!pendingLaunch.tokenAction && pendingLaunch.view !== 'log' && pendingLaunch.view !== 'status') pendingLaunch = null;
+    renderRegistration();
+    focusButton();
+    if (pendingLaunch && pendingLaunch.view === 'log') {
+        handleLaunch(pendingLaunch);
+        pendingLaunch = null;
+    }
+    loadWebOSLibrary();
 }
-loadWebOSLibrary();

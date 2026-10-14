@@ -41,6 +41,7 @@ function fixture(options = {}) {
     const pairing = options.pairingPending ? new Promise(resolve => { approvePairing = resolve; }) : Promise.resolve();
     context = {
         console, URLSearchParams, Date,
+        close() { calls.push({ spec: { method: 'window.close' } }); },
         NativeAlertClient: class {
             connect() {
                 if (options.pairingDenied) return Promise.reject(Object.assign(new Error('TV pairing was declined.'), { pairingFailed: true }));
@@ -118,7 +119,7 @@ test('native alert offers the original actions and Show Log through app relaunch
     assert.equal(alert.service, 'ssap://system.notifications');
     const payload = JSON.parse(JSON.stringify(alert.spec.parameters));
     assert.equal(payload.modal, true);
-    assert.deepEqual(payload.buttons.map(button => button.label), ['Renew Automatically', 'Show Log']);
+    assert.deepEqual(payload.buttons.map(button => button.label), ['Renew Automatically', 'Show Log', 'Dismiss']);
     assert.match(payload.message, /not yet being renewed automatically/);
     assert.equal(payload.buttons[0].focus, true);
     for (const button of payload.buttons) {
@@ -136,7 +137,7 @@ test('native alert offers the original actions and Show Log through app relaunch
     assert.deepEqual(Object.fromEntries(new URLSearchParams(request.init.body)), { key: KEY, action: 'add' });
     assert.ok(app.calls.some(call => call.spec.method === 'closeAlert' && call.spec.parameters.alertId === 'test-alert'));
     const activeAlert = app.calls.filter(call => call.spec.method === 'createAlert').at(-1).spec.parameters;
-    assert.deepEqual(Array.from(activeAlert.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log']);
+    assert.deepEqual(Array.from(activeAlert.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log', 'Dismiss']);
     assert.match(activeAlert.message, /already being renewed automatically/);
     app.events.webOSRelaunch({ detail: activeAlert.buttons[0].params.params });
     await flush();
@@ -232,7 +233,7 @@ test('D-pad skips hidden actions and Enter opens the log', async () => {
     assert.equal(app.elements.get('log-section').attributes['aria-hidden'], 'true');
 });
 
-test('read-only startup sends the hash and shows only Renew and Log for an absent key', async () => {
+test('read-only startup sends the hash and shows Renew, Log, and Dismiss for an absent key', async () => {
     const app = fixture();
     assert.deepEqual(Array.from(app.context.availableButtons(), button => button.id), ['toggle-log-btn']);
     await app.load();
@@ -245,14 +246,14 @@ test('read-only startup sends the hash and shows only Renew and Log for an absen
     assert.deepEqual(Array.from(app.context.availableButtons(), button => button.id), ['renew-btn', 'toggle-log-btn']);
 });
 
-test('existing key shows only Stop and Log without attempting a duplicate registration', async () => {
+test('existing key shows Stop, Log, and Dismiss without attempting a duplicate registration', async () => {
     const app = fixture({ registered: true });
     await app.load();
     assert.equal(app.mutations().length, 0);
     assert.equal(app.elements.get('dialog-description').textContent, 'Your token is already being renewed automatically.');
     assert.deepEqual(Array.from(app.context.availableButtons(), button => button.id), ['remove-btn', 'toggle-log-btn']);
     const payload = app.calls.find(call => call.spec.method === 'createAlert').spec.parameters;
-    assert.deepEqual(Array.from(payload.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log']);
+    assert.deepEqual(Array.from(payload.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log', 'Dismiss']);
 });
 
 test('lookup failure, missing server endpoint, and malformed replies never claim inactive', async () => {
@@ -263,7 +264,7 @@ test('lookup failure, missing server endpoint, and malformed replies never claim
         assert.deepEqual(Array.from(app.context.availableButtons(), button => button.id), ['retry-btn', 'toggle-log-btn']);
         assert.equal(app.mutations().length, 0);
         const alert = app.calls.find(call => call.spec.method === 'createAlert').spec.parameters;
-        assert.deepEqual(Array.from(alert.buttons, button => button.label), ['Check Again', 'Show Log']);
+        assert.deepEqual(Array.from(alert.buttons, button => button.label), ['Check Again', 'Show Log', 'Dismiss']);
     }
 });
 
@@ -353,7 +354,7 @@ test('pairing completion uses the latest registration state without duplicate al
     await flush();
     const alerts = app.calls.filter(call => call.spec.method === 'createAlert');
     assert.equal(alerts.length, 1);
-    assert.deepEqual(Array.from(alerts[0].spec.parameters.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log']);
+    assert.deepEqual(Array.from(alerts[0].spec.parameters.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log', 'Dismiss']);
 });
 
 test('opening the native log while pairing suppresses the stale status alert', async () => {
@@ -391,12 +392,12 @@ test('native status and log dialogs keep fallback hidden and support native Back
     await flush();
     const log = app.calls.filter(call => call.spec.method === 'createAlert').at(-1).spec.parameters;
     assert.match(log.title, /Log/);
-    assert.deepEqual(Array.from(log.buttons, button => button.label), ['Back', 'Refresh Log']);
+    assert.deepEqual(Array.from(log.buttons, button => button.label), ['Back', 'Refresh Log', 'Dismiss']);
     assert.equal(app.elements.get('app-container').hidden, true);
     app.events.webOSRelaunch({ detail: log.buttons[0].params.params });
     await flush();
     const status = app.calls.filter(call => call.spec.method === 'createAlert').at(-1).spec.parameters;
-    assert.deepEqual(Array.from(status.buttons, button => button.label), ['Renew Automatically', 'Show Log']);
+    assert.deepEqual(Array.from(status.buttons, button => button.label), ['Renew Automatically', 'Show Log', 'Dismiss']);
     assert.equal(app.elements.get('app-container').hidden, true);
 });
 
@@ -408,6 +409,45 @@ test('reopening a running app without an action shows its native status again', 
     await flush();
     assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, before + 1);
     assert.equal(app.elements.get('app-container').hidden, true);
+});
+
+test('Dismiss closes status and log alerts before exiting without changing renewal', async () => {
+    for (const view of ['status', 'log']) {
+        const app = fixture({ registered: true });
+        await app.load();
+        if (view === 'log') await app.context.showNativeLog();
+        const alerts = app.calls.filter(call => call.spec.method === 'createAlert');
+        const dismiss = alerts.at(-1).spec.parameters.buttons.find(button => button.label === 'Dismiss');
+        assert.equal(dismiss.onclick, 'luna://com.webos.applicationManager/launch');
+        const requestsBefore = app.requests.length;
+        app.events.webOSRelaunch({ detail: dismiss.params.params });
+        await flush();
+        assert.deepEqual(app.calls.slice(-2).map(call => call.spec.method), ['closeAlert', 'window.close']);
+        assert.equal(app.context.nativeAlertId, null);
+        assert.equal(app.context.registrationState, 'active');
+        assert.equal(app.requests.length, requestsBefore);
+        assert.equal(app.mutations().length, 0);
+        assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, alerts.length);
+    }
+});
+
+test('Dismiss during pairing exits and prevents an alert after late approval', async () => {
+    const app = fixture({ pairingPending: true });
+    await app.load();
+    app.events.webOSRelaunch({ detail: { view: 'dismiss' } });
+    await flush();
+    assert.equal(app.calls.at(-1).spec.method, 'window.close');
+    app.approvePairing();
+    await flush();
+    assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, 0);
+});
+
+test('a cold Dismiss callback exits without loading the helper or contacting the server', async () => {
+    const app = fixture({ launch: { view: 'dismiss' } });
+    await flush();
+    assert.deepEqual(app.calls.map(call => call.spec.method), ['window.close']);
+    assert.equal(app.scripts.length, 0);
+    assert.equal(app.requests.length, 0);
 });
 
 test('declined pairing exposes an explained permission request and can recover', async () => {
