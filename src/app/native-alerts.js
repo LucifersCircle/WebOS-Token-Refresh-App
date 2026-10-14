@@ -3,6 +3,12 @@
     'use strict';
     var KEY_NAME = 'com.pirate.refresh.nativeAlerts.clientKey';
 
+    function pairingError(message) {
+        var error = new Error(message);
+        error.pairingFailed = true;
+        return error;
+    }
+
     function NativeAlertClient(options) {
         options = options || {};
         this.WebSocket = options.WebSocket || global.WebSocket;
@@ -48,9 +54,9 @@
                 if (!settled) { settled = true; reject(error); }
                 if (socket) socket.close();
             }
-            function deadline(delay, message) {
+            function deadline(delay, message, pairing) {
                 clearTimeout(timer);
-                timer = setTimeout(function () { fail(new Error(message)); }, delay);
+                timer = setTimeout(function () { fail(pairing ? pairingError(message) : new Error(message)); }, delay);
             }
             function register() {
                 registrationId = 'register-' + (++self.sequence);
@@ -73,7 +79,7 @@
                             permissions: ['WRITE_NOTIFICATION_TOAST']
                         }
                     };
-                    deadline(60000, 'TV pairing timed out.');
+                    deadline(60000, 'TV pairing timed out.', true);
                 }
                 socket.send(JSON.stringify({ type: 'register', id: registrationId, payload: payload }));
             }
@@ -93,7 +99,10 @@
                     if (message.id === registrationId && !settled) {
                         if (message.type === 'registered') {
                             var key = message.payload && message.payload['client-key'];
-                            if (typeof key !== 'string' || !key) return fail(new Error('TV pairing returned no key.'));
+                            if (typeof key !== 'string' || !key) {
+                                self.saveKey(null);
+                                return fail(pairingError('TV pairing failed to return a key.'));
+                            }
                             self.saveKey(key);
                             clearTimeout(timer);
                             self.ready = true;
@@ -106,7 +115,8 @@
                                 usingSavedKey = false;
                                 self.saveKey(null);
                                 try { register(); } catch (_) { fail(new Error('Could not restart TV pairing.')); }
-                            } else fail(new Error('TV pairing was declined or unavailable.'));
+                            } else if (usingSavedKey) fail(new Error('Saved TV approval could not be checked.'));
+                            else fail(pairingError('TV pairing was declined or could not be completed.'));
                         }
                         return;
                     }

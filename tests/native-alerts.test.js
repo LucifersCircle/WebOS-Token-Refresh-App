@@ -103,10 +103,22 @@ test('network failure keeps the saved key and supports retry', async () => {
     assert.equal(app.sockets.length, 2);
 });
 
+test('a service error checking saved approval does not offer fresh pairing', async () => {
+    const app = fixture({ key: 'keep-me' });
+    const failed = assert.rejects(app.client.connect(), error => !error.pairingFailed && /could not be checked/.test(error.message));
+    const socket = app.sockets[0]; socket.open();
+    socket.receive({ type: 'error', id: socket.sent[0].id, error: '500 Service unavailable' });
+    await failed;
+    assert.equal(app.saved.get(KEY_NAME), 'keep-me');
+    assert.equal(app.states.includes('pairing'), false);
+    await app.ready();
+    assert.deepEqual(app.sockets[1].sent[0].payload, { 'client-key': 'keep-me' });
+});
+
 test('declined pairing and timeout reject without trapping the app', async () => {
     for (const mode of ['decline', 'timeout']) {
         const app = fixture();
-        const failed = assert.rejects(app.client.connect(), /pairing/);
+        const failed = assert.rejects(app.client.connect(), error => error.pairingFailed === true && /pairing/.test(error.message));
         const socket = app.sockets[0]; socket.open();
         if (mode === 'decline') socket.receive({ type: 'error', id: socket.sent[0].id, error: '403 User rejected pairing' });
         else app.expire(60000);
@@ -119,7 +131,7 @@ test('declined pairing and timeout reject without trapping the app', async () =>
 
 test('missing pairing keys and an unavailable WebSocket fail cleanly', async () => {
     const app = fixture();
-    const failed = assert.rejects(app.client.connect(), /no key/);
+    const failed = assert.rejects(app.client.connect(), error => error.pairingFailed === true && /key/.test(error.message));
     app.sockets[0].open(); app.sockets[0].register(''); await failed;
     const missingSocket = fixture({ constructorFailure: true });
     await assert.rejects(missingSocket.client.connect(), /unavailable/);

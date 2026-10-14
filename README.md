@@ -22,7 +22,11 @@ TV and is never sent to the token-renewal server or written to the app log.
 
 The alert buttons relaunch the app with the selected action. If pairing is
 declined, times out, or the TV remote service is unavailable, the same state and
-actions remain available in an app dialog, with **Retry Native Alerts**.
+actions remain available in an app dialog. Failed, declined, or timed-out pairing
+shows **Request TV Permission**, with an explanation of the TV approval prompt,
+notification permission, saved approval, and how pairing differs from enabling
+token renewal. Connection or alert-request failures offer **Retry Native Dialogs**
+without discarding the saved permission.
 While native alerts work, the fallback card is hidden. **Show Log** opens another
 native alert with the eight most recent log entries, **Back**, and **Refresh Log**.
 Long entries are shortened to fit the TV dialog; the fallback log retains them.

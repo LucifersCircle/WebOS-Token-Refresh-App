@@ -15,7 +15,7 @@ h1 { font-size: 2.35vw; font-weight: 500; line-height: 1.2; margin: 0 0 1.6vh; }
 #response[data-state="success"] { color: #25713a; }
 #response[data-state="error"] { color: #a31530; }
 #info-section { margin: 0 0 2.6vh; font-size: 1.1vw; line-height: 1.6; color: #666; }
-#native-alert-status { font-size: 1.1vw; line-height: 1.5; color: #666; }
+#native-alert-status { font-size: 1.1vw; line-height: 1.5; color: #666; white-space: pre-line; }
 #button-container { display: flex; flex-direction: column; }
 button { width: 100%; padding: 1.5vh 1vw; margin: .4vh 0; border: 0; border-radius: 0; background: #d7d7d7; color: #262626; font: inherit; font-size: 1.55vw; line-height: 1.4; cursor: pointer; }
 button:hover, button:focus { background: #c6004f; color: #fff; outline: 0; }

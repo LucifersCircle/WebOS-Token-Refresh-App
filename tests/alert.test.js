@@ -42,7 +42,10 @@ function fixture(options = {}) {
     context = {
         console, URLSearchParams, Date,
         NativeAlertClient: class {
-            connect() { return pairing; }
+            connect() {
+                if (options.pairingDenied) return Promise.reject(Object.assign(new Error('TV pairing was declined.'), { pairingFailed: true }));
+                return pairing;
+            }
             request(method, parameters) {
                 calls.push({ service: 'ssap://system.notifications', spec: { method, parameters } });
                 if (method === 'createAlert') {
@@ -405,4 +408,30 @@ test('reopening a running app without an action shows its native status again', 
     await flush();
     assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, before + 1);
     assert.equal(app.elements.get('app-container').hidden, true);
+});
+
+test('declined pairing exposes an explained permission request and can recover', async () => {
+    const options = { pairingDenied: true };
+    const app = fixture(options);
+    await app.load();
+    assert.equal(app.elements.get('app-container').hidden, false);
+    assert.equal(app.elements.get('native-alert-btn').hidden, false);
+    assert.equal(app.elements.get('native-alert-btn').textContent, 'Request TV Permission');
+    const explanation = app.elements.get('native-alert-status').textContent;
+    assert.match(explanation, /pairing prompt again/);
+    assert.match(explanation, /notification permission/);
+    assert.match(explanation, /saved on this TV/);
+    assert.match(explanation, /does not enable or stop automatic token renewal/);
+    options.pairingDenied = false;
+    app.elements.get('native-alert-btn').click();
+    await flush();
+    assert.equal(app.context.nativeAlertId, 'test-alert');
+    assert.equal(app.elements.get('app-container').hidden, true);
+});
+
+test('a connection or alert error does not claim pairing was declined', async () => {
+    const app = fixture({ nativeDenied: true });
+    await app.load();
+    assert.equal(app.elements.get('native-alert-btn').textContent, 'Retry Native Dialogs');
+    assert.match(app.elements.get('native-alert-status').textContent, /Any saved TV approval will be reused/);
 });

@@ -211,8 +211,12 @@ async function showNativeDialog(view, result) {
     } catch (error) {
         if (generation !== nativeAlertGeneration) return;
         nativeAlertAvailable = false;
-        document.getElementById('native-alert-status').textContent = 'Native alerts are unavailable. Use the app buttons or retry pairing.';
-        document.getElementById('native-alert-btn').hidden = false;
+        var retry = document.getElementById('native-alert-btn');
+        retry.textContent = error.pairingFailed ? 'Request TV Permission' : 'Retry Native Dialogs';
+        document.getElementById('native-alert-status').textContent = error.pairingFailed
+            ? error.message + '\n\nSelect “Request TV Permission” to show the TV’s pairing prompt again, then approve “Auto Token Refresh” on your TV. The app requests notification permission so it can display native status and log dialogs. Approval is saved on this TV for future launches.\n\nThis does not enable or stop automatic token renewal. You can still use the renewal buttons below without pairing.'
+            : 'Native dialogs could not connect or respond. Select “Retry Native Dialogs” to reconnect. Any saved TV approval will be reused. You can also use the app buttons below.';
+        retry.hidden = false;
         logEvent('System alert unavailable; using the app dialog. ' + error.message);
         showFallback(view === 'log');
         focusButton();
