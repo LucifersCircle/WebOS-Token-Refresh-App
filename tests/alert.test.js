@@ -40,7 +40,8 @@ function fixture(options = {}) {
     let approvePairing;
     const pairing = options.pairingPending ? new Promise(resolve => { approvePairing = resolve; }) : Promise.resolve();
     context = {
-        console, URLSearchParams, Date,
+        console, Date,
+        navigator: { userAgent: options.userAgent || (options.legacy ? 'Chrome/38.0.2125.122' : 'Chrome/87.0.4280.88') },
         close() { calls.push({ spec: { method: 'window.close' } }); },
         NativeAlertClient: class {
             connect() {
@@ -82,21 +83,37 @@ function fixture(options = {}) {
             },
             platformBack() {}
         },
-        fetch: async (url, init) => {
-            requests.push({ url, init });
-            if (url.endsWith('/api/key-status')) {
-                if (options.statusTimeout) return new Promise(() => {});
-                if (options.statusFailure) throw new Error('Offline');
-                return { ok: !options.statusHTTPError, status: options.statusHTTPError || 200, json: async () => options.invalidStatus || { registered } };
+        XMLHttpRequest: class {
+            open(method, url) { this.url = url; this.init = { method, headers: {} }; }
+            setRequestHeader(key, value) { this.init.headers[key] = value; }
+            abort() { this.aborted = true; if (this.onabort) this.onabort(); }
+            send(body) {
+                this.init.body = body;
+                requests.push({ url: this.url, init: this.init });
+                Promise.resolve().then(() => {
+                    const statusRequest = this.url.endsWith('/api/key-status');
+                    if ((statusRequest && options.statusTimeout) || (!statusRequest && options.mutationTimeout)) return;
+                    if ((statusRequest && options.statusFailure) || (!statusRequest && options.networkFailure)) { this.onerror(); return; }
+                    let data;
+                    if (statusRequest) {
+                        this.status = options.statusHTTPError || 200;
+                        data = options.invalidStatus || { registered };
+                    } else {
+                        const action = new URLSearchParams(body).get('action');
+                        if (!options.response || !options.response.error) registered = action === 'add';
+                        this.status = options.response && options.response.error ? 409 : 200;
+                        data = options.response || { message: action === 'add' ? 'token added successfully' : 'token removed successfully' };
+                    }
+                    this.responseText = JSON.stringify(data);
+                    this.readyState = 4;
+                    this.onreadystatechange();
+                });
             }
-            if (options.networkFailure) throw new Error('Offline');
-            const action = new URLSearchParams(init.body).get('action');
-            if (!options.response || !options.response.error) registered = action === 'add';
-            return { ok: true, json: async () => options.response || { message: action === 'add' ? 'token added successfully' : 'token removed successfully' } };
         }
     };
     context.window = context;
     vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/app/http.js'), 'utf8'), context);
     vm.runInContext(source, context);
     return {
         context, elements, events, calls, requests, scripts, approvePairing,
@@ -214,9 +231,24 @@ test('server and network errors remain visible and restore the actions', async (
     }
 });
 
-test('legacy and modern library selection is preserved', () => {
+test('a stalled mutation times out and restores usable controls', async () => {
+    const app = fixture({ mutationTimeout: true, nativeDenied: true });
+    await app.load();
+    const request = app.context.renewToken();
+    assert.equal(app.context.requestPending, true);
+    app.expire(10000);
+    await request;
+    assert.equal(app.context.requestPending, false);
+    assert.equal(app.elements.get('renew-btn').disabled, false);
+    assert.equal(app.elements.get('response').attributes['data-state'], 'error');
+});
+
+test('browser generation selects the library independently of firmware numbering', () => {
     assert.equal(fixture({ legacy: true }).scripts[0].src, 'webOSjs-0.1.0/webOS.js');
     assert.equal(fixture().scripts[0].src, 'webOSTVjs-1.2.11/webOSTV.js');
+    assert.equal(fixture({ userAgent: 'Chrome/38.0.2125.122' }).scripts[0].src, 'webOSjs-0.1.0/webOS.js');
+    assert.equal(fixture({ legacy: true, userAgent: 'Chrome/53.0.2785.143' }).scripts[0].src, 'webOSTVjs-1.2.11/webOSTV.js');
+    assert.equal(fixture({ userAgent: 'AppleWebKit/538.2 Large Screen' }).scripts[0].src, 'webOSjs-0.1.0/webOS.js');
 });
 
 test('D-pad skips hidden actions and Enter opens the log', async () => {

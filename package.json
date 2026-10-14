@@ -1,0 +1,13 @@
+{
+  "name": "webos-token-refresh-app-checks",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js && node tests/legacy-service.cjs"
+  },
+  "devDependencies": {
+    "acorn": "8.15.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

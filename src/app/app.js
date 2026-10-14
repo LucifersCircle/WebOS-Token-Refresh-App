@@ -82,41 +82,28 @@ function renderRegistration() {
     if (!focused || focused.hidden || focused.disabled) focusButton();
 }
 
-async function checkRegistration(openAlert) {
-    if (statusPending || requestPending || !window.token || !keyHash) return false;
+function checkRegistration(openAlert) {
+    if (statusPending || requestPending || !window.token || !keyHash) return Promise.resolve(false);
     if (nativeView !== 'log') closeNativeAlert();
     statusPending = true;
     registrationState = 'checking';
     renderRegistration();
-    var timer;
     logEvent('Checking token registration by SHA-256 hash…');
-    try {
-        var lookup = fetch('https://lg.pirate.vodka/api/key-status', {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ key_hash: keyHash }).toString()
-        }).then(async function (response) {
-            if (!response.ok) throw new Error('Status lookup returned HTTP ' + response.status);
-            var json = await response.json();
-            if (typeof json.registered !== 'boolean') throw new Error('Invalid registration response');
-            return json.registered;
-        });
-        var timeout = new Promise(function (resolve, reject) {
-            timer = setTimeout(function () { reject(new Error('Status lookup timed out')); }, 8000);
-        });
-        registrationState = await Promise.race([lookup, timeout]) ? 'active' : 'inactive';
+    return postFormJSON('https://lg.pirate.vodka/api/key-status', { key_hash: keyHash }, 8000).then(function (response) {
+        if (!response.ok) throw new Error('Status lookup returned HTTP ' + response.status);
+        if (!response.data || typeof response.data.registered !== 'boolean') throw new Error('Invalid registration response');
+        registrationState = response.data.registered ? 'active' : 'inactive';
         logEvent(registrationState === 'active' ? 'Token is registered for automatic renewal.' : 'Token is not registered for automatic renewal.');
-    } catch (error) {
+    }).catch(function (error) {
         registrationState = 'unknown';
         logEvent('Unable to check automatic renewal: ' + error.message);
-    } finally {
-        clearTimeout(timer);
+    }).then(function () {
         statusPending = false;
         renderRegistration();
-    }
-    if (!document.getElementById('log-section').classList.contains('expanded')) focusButton();
-    if (openAlert !== false) showNativeAlert();
-    return registrationState !== 'unknown';
+        if (!document.getElementById('log-section').classList.contains('expanded')) focusButton();
+        if (openAlert !== false) showNativeAlert();
+        return registrationState !== 'unknown';
+    });
 }
 
 function toggleLog(forceOpen) {
@@ -159,9 +146,9 @@ function showNativeLog() {
     return showNativeDialog('log');
 }
 
-async function showNativeDialog(view, result) {
-    if (!nativeAlertAvailable || nativeAlertPending) return;
-    if (view === 'status' && (!libraryReady || !window.token || statusPending || registrationState === 'checking')) return;
+function showNativeDialog(view, result) {
+    if (!nativeAlertAvailable || nativeAlertPending) return Promise.resolve();
+    if (view === 'status' && (!libraryReady || !window.token || statusPending || registrationState === 'checking')) return Promise.resolve();
     nativeAlertPending = true;
     var generation = nativeAlertGeneration;
     document.getElementById('native-alert-btn').hidden = true;
@@ -169,8 +156,7 @@ async function showNativeDialog(view, result) {
     var loading = document.getElementById('loading-status');
     loading.textContent = 'Opening native alerts…';
     loading.hidden = false;
-    try {
-        await nativeAlerts.connect();
+    return nativeAlerts.connect().then(function () {
         // Pairing can take a minute. Do not display a superseded dialog.
         if (generation !== nativeAlertGeneration) return;
         if (view === 'status' && (statusPending || requestPending || nativeView !== 'status')) return;
@@ -195,9 +181,12 @@ async function showNativeDialog(view, result) {
             buttons.push(alertButton('Show Log', { view: 'log' }));
         }
         buttons.push(alertButton('Dismiss', { view: 'dismiss' }));
-        var response = await nativeAlerts.request('createAlert', {
+        return nativeAlerts.request('createAlert', {
             title: title, message: message, modal: true, buttons: buttons
         });
+    }).then(function (response) {
+        // A superseded dialog does not create a request above.
+        if (!response) return;
         if (!response.alertId) throw new Error('The TV returned no alert ID.');
         if (generation !== nativeAlertGeneration) {
             nativeAlerts.closeAlert(response.alertId).catch(function () {});
@@ -209,7 +198,7 @@ async function showNativeDialog(view, result) {
         loading.hidden = true;
         document.getElementById('native-alert-status').textContent = '';
         logEvent('System ' + (view === 'log' ? 'log ' : '') + 'alert opened through the paired TV connection.');
-    } catch (error) {
+    }).catch(function (error) {
         if (generation !== nativeAlertGeneration) return;
         nativeAlertAvailable = false;
         var retry = document.getElementById('native-alert-btn');
@@ -221,7 +210,7 @@ async function showNativeDialog(view, result) {
         logEvent('System alert unavailable; using the app dialog. ' + error.message);
         showFallback(view === 'log');
         focusButton();
-    } finally { if (generation === nativeAlertGeneration) nativeAlertPending = false; }
+    }).then(function () { if (generation === nativeAlertGeneration) nativeAlertPending = false; });
 }
 
 function closeNativeAlert() {
@@ -272,6 +261,7 @@ function fetchToken() {
             onSuccess: function (response) {
                 clearTimeout(timeout);
                 if (!response.returnValue) return fail('Error: ' + response.errorText);
+                if (typeof response.content !== 'string') return fail('The token helper returned invalid content.');
                 window.token = response.content.trim();
                 keyHash = response.keyHash;
                 if (!window.token) return fail('Developer mode token file is empty.');
@@ -303,10 +293,10 @@ function createPayload(action) {
         displayResponse({ error: 'Token not available!' });
         return null;
     }
-    return new URLSearchParams({ key: window.token, action: action }).toString();
+    return { key: window.token, action: action };
 }
 
-async function sendRequest(action) {
+function sendRequest(action) {
     if (requestPending || statusPending) return;
     var payload = createPayload(action);
     if (!payload) return;
@@ -319,25 +309,24 @@ async function sendRequest(action) {
     responseElement.textContent = action === 'add' ? 'Enabling automatic renewal…' : 'Stopping automatic renewal…';
     responseElement.removeAttribute('data-state');
     logEvent('Sending request for action: ' + action);
-    try {
-        var response = await fetch('https://lg.pirate.vodka', {
-            method: 'POST',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: payload
-        });
-        var json = await response.json();
+    return postFormJSON('https://lg.pirate.vodka', payload, 10000).then(function (response) {
+        var json = response.data;
+        if (!json || typeof json !== 'object' || (!response.ok && !json.error)) {
+            throw new Error('Unexpected server response (HTTP ' + response.status + ')');
+        }
         logEvent('Server response received for action: ' + action + ': ' + JSON.stringify(json));
         displayResponse(json);
-    } catch (error) {
+    }).catch(function (error) {
         logEvent('Error during request for action ' + action + ': ' + error.message);
         displayResponse({ error: 'Failed to ' + action + ' token' });
-    } finally {
+    }).then(function () {
         requestPending = false;
-        await checkRegistration(false);
+        return checkRegistration(false);
+    }).then(function () {
         renderRegistration();
         focusButton();
         showNativeAlert(responseElement.textContent);
-    }
+    });
 }
 
 function renewToken() { return sendRequest('add'); }
@@ -380,11 +369,11 @@ document.addEventListener('webOSRelaunch', function (event) {
 });
 
 function loadWebOSLibrary() {
-    var legacy = false;
-    try {
-        var info = JSON.parse((window.PalmSystem && window.PalmSystem.deviceInfo) || '{}');
-        legacy = !!info.platformVersionMajor && parseInt(info.platformVersionMajor, 10) < 4;
-    } catch (error) { logEvent('Error reading deviceInfo: ' + error.message); }
+    // PalmSystem.platformVersion is firmware (e.g. 06.10.60), not the webOS SDK.
+    var userAgent = window.navigator ? window.navigator.userAgent : '';
+    var chromium = /(?:Chrome|Chromium)\/(\d+)/.exec(userAgent);
+    var legacy = !chromium || parseInt(chromium[1], 10) < 53;
+    logEvent('Browser: ' + (userAgent || 'unavailable'));
     var script = document.createElement('script');
     script.src = legacy ? 'webOSjs-0.1.0/webOS.js' : 'webOSTVjs-1.2.11/webOSTV.js';
     logEvent('Loading ' + (legacy ? 'webOS.js' : 'webOSTV.js'));

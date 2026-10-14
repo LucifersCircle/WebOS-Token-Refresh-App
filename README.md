@@ -53,11 +53,22 @@ server. An older server without this endpoint will show the retry state. The new
 endpoint checks the existing hash column without inserting, refreshing, removing,
 or decrypting a token. After enabling automatic renewal, you can uninstall the app.
 
+The app and token helper use ES5 syntax for older runtimes. Form requests use XHR
+and explicit field encoding, so they do not require `fetch` or `URLSearchParams`.
+The compatibility target is webOS 3.x and later; native alerts still depend on
+the TV's paired remote interface. Firmware numbers are not used as webOS versions.
+
 Run the regression checks with Node.js 18 or later:
 
 ```sh
-node --test tests/*.test.js
+npm ci
+npm test
 ```
+
+See [the compatibility test handoff](docs/compatibility-testing.md) for old-runtime
+checks, an isolated full-browser test, and the remaining webOS 3.x/4.x emulator
+matrix. Actual Chromium 53 and Node 0.12.2 checks pass locally; full old-emulator
+compatibility remains to be verified.
 
 Package the app and helper with the webOS CLI:
 

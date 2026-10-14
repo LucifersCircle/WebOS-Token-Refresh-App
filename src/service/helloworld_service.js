@@ -7,7 +7,7 @@ var service = new Service(pkgInfo.name);
 var filePath = '/var/luna/preferences/devmode_enabled';
 
 service.register("readFile", function (message) {
-    fs.readFile(filePath, 'utf8', (err, data) => {
+    fs.readFile(filePath, 'utf8', function (err, data) {
         if (err) {
             message.respond({
                 returnValue: false,
