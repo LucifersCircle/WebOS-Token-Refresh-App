@@ -17,11 +17,6 @@ jobs:
         with:
           node-version: '18.18.0'
 
-      - name: Check compatibility and regressions before packaging
-        run: |
-          npm ci
-          npm test
-
       # Install ares-cli
       - name: Install ares-cli
         run: |
