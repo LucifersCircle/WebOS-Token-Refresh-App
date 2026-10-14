@@ -5,6 +5,7 @@
   "type": "web",
   "main": "index.html",
   "title": "Auto Token Refresh",
+  "handlesRelaunch": true,
   "icon": "icon.png",
   "largeIcon": "largeIcon.png"
 }

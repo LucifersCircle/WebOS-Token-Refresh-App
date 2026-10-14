@@ -32,19 +32,35 @@ function fixture(options = {}) {
             appendChild(child) { this.children.push(child); },
             focus() { context.document.activeElement = this; },
             scrollIntoView() {}, addEventListener() {},
-            click() { return ({ 'renew-btn': context.renewToken, 'remove-btn': context.removeToken, 'retry-btn': context.checkRegistration, 'toggle-log-btn': context.toggleLog })[id](); }
+            click() { return ({ 'renew-btn': context.renewToken, 'remove-btn': context.removeToken, 'retry-btn': context.checkRegistration, 'toggle-log-btn': context.toggleLog, 'native-alert-btn': context.retryNativeAlert })[id](); }
         };
     }
-    ['token', 'response', 'log-content', 'log-section', 'dialog-description', 'info-section', 'renew-btn', 'remove-btn', 'retry-btn', 'toggle-log-btn'].forEach(id => elements.set(id, element(id)));
+    ['native-alert-status', 'token', 'response', 'log-content', 'log-section', 'dialog-description', 'info-section', 'renew-btn', 'remove-btn', 'retry-btn', 'toggle-log-btn', 'native-alert-btn'].forEach(id => elements.set(id, element(id)));
+    elements.get('native-alert-btn').hidden = true;
+    let approvePairing;
+    const pairing = options.pairingPending ? new Promise(resolve => { approvePairing = resolve; }) : Promise.resolve();
     context = {
         console, URLSearchParams, Date,
+        NativeAlertClient: class {
+            connect() { return pairing; }
+            request(method, parameters) {
+                calls.push({ service: 'ssap://system.notifications', spec: { method, parameters } });
+                if (method === 'createAlert') {
+                    if (options.nativeTimeout) return new Promise((resolve, reject) => context.setTimeout(() => reject(new Error('Native alert request timed out')), 5000));
+                    if (options.nativeDenied) return Promise.reject(new Error('Permission denied'));
+                    return Promise.resolve({ returnValue: true, alertId: 'test-alert' });
+                }
+                return Promise.resolve({ returnValue: true });
+            }
+            closeAlert(alertId) { return this.request('closeAlert', { alertId }); }
+        },
         token: elements.get('token'), // Named DOM properties must not become API keys.
         PalmSystem: { deviceInfo: JSON.stringify({ platformVersionMajor: options.legacy ? 3 : 6 }), launchParams: JSON.stringify(options.launch || {}) },
         document: {
             activeElement: null,
             getElementById: id => elements.get(id),
             createElement: () => element(''),
-            querySelectorAll: () => ['renew-btn', 'remove-btn', 'retry-btn', 'toggle-log-btn'].map(id => elements.get(id)),
+            querySelectorAll: () => ['renew-btn', 'remove-btn', 'retry-btn', 'toggle-log-btn', 'native-alert-btn'].map(id => elements.get(id)),
             addEventListener: (event, callback) => { events[event] = callback; },
             head: { appendChild: script => scripts.push(script) }
         },
@@ -57,11 +73,7 @@ function fixture(options = {}) {
                     if (spec.method === 'readFile') {
                         if (options.readFailure) spec.onFailure({ message: 'Cannot read token' });
                         else if (!options.readTimeout) spec.onSuccess({ returnValue: true, content: KEY + '\n', keyHash: options.missingHash ? undefined : KEY_HASH });
-                    } else if (spec.method === 'createAlert') {
-                        if (options.nativeTimeout) return;
-                        if (options.nativeDenied) spec.onSuccess({ returnValue: false, errorText: 'Permission denied' });
-                        else spec.onSuccess({ returnValue: true, alertId: 'test-alert' });
-                    }
+                    } else throw new Error('Unexpected direct Luna call: ' + spec.method);
                 }
             },
             platformBack() {}
@@ -83,7 +95,7 @@ function fixture(options = {}) {
     vm.createContext(context);
     vm.runInContext(source, context);
     return {
-        context, elements, events, calls, requests, scripts,
+        context, elements, events, calls, requests, scripts, approvePairing,
         mutations: () => requests.filter(request => !request.url.endsWith('/api/key-status')),
         async load() { scripts[0].onload(); await flush(); },
         setRegistered(value) { registered = value; },
@@ -100,14 +112,14 @@ test('native alert offers the original actions and Show Log through app relaunch
     assert.equal(app.calls[0].service, 'luna://com.pirate.refresh.service');
     assert.equal(app.calls[0].spec.method, 'readFile');
     const alert = app.calls.find(call => call.spec.method === 'createAlert');
-    assert.equal(alert.service, 'luna://com.webos.notification');
+    assert.equal(alert.service, 'ssap://system.notifications');
     const payload = JSON.parse(JSON.stringify(alert.spec.parameters));
     assert.equal(payload.modal, true);
     assert.deepEqual(payload.buttons.map(button => button.label), ['Renew Automatically', 'Show Log']);
     assert.match(payload.message, /not yet being renewed automatically/);
     assert.equal(payload.buttons[0].focus, true);
     for (const button of payload.buttons) {
-        assert.equal(button.onclick, 'luna://com.webos.service.applicationmanager/launch');
+        assert.equal(button.onclick, 'luna://com.webos.applicationManager/launch');
         assert.equal(button.params.id, 'com.pirate.refresh');
     }
     app.events.webOSRelaunch({ detail: payload.buttons[0].params.params });
@@ -144,7 +156,8 @@ test('native permission denial preserves the state-appropriate fallback action',
 test('an unanswered native alert times out to the usable fallback', async () => {
     const app = fixture({ nativeTimeout: true });
     await app.load();
-    app.expire(2000);
+    app.expire(5000);
+    await flush();
     assert.equal(app.context.nativeAlertAvailable, false);
     assert.equal(app.context.document.activeElement.id, 'renew-btn');
 });
@@ -322,4 +335,41 @@ test('helper hashes exactly the trimmed token used by the existing server', () =
         assert.equal(response.content, KEY);
         assert.equal(response.keyHash, KEY_HASH);
     } });
+});
+
+
+test('pairing completion uses the latest registration state without duplicate alerts', async () => {
+    const app = fixture({ pairingPending: true });
+    await app.load();
+    assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, 0);
+    await app.context.renewToken();
+    app.approvePairing();
+    await flush();
+    const alerts = app.calls.filter(call => call.spec.method === 'createAlert');
+    assert.equal(alerts.length, 1);
+    assert.deepEqual(Array.from(alerts[0].spec.parameters.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log']);
+});
+
+test('opening the log while pairing suppresses the delayed native alert', async () => {
+    const app = fixture({ pairingPending: true });
+    await app.load();
+    app.context.toggleLog(true);
+    app.approvePairing();
+    await flush();
+    assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, 0);
+    assert.equal(app.elements.get('log-section').attributes['aria-hidden'], 'false');
+    assert.equal(app.context.nativeAlertPending, false);
+});
+
+test('native failure exposes retry and a successful retry restores native alerts', async () => {
+    const options = { nativeDenied: true };
+    const app = fixture(options);
+    await app.load();
+    assert.equal(app.elements.get('native-alert-btn').hidden, false);
+    options.nativeDenied = false;
+    app.context.retryNativeAlert();
+    await flush();
+    assert.equal(app.context.nativeAlertAvailable, true);
+    assert.equal(app.elements.get('native-alert-btn').hidden, true);
+    assert.equal(app.context.nativeAlertId, 'test-alert');
 });

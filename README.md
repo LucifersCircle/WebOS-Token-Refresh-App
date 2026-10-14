@@ -11,11 +11,26 @@ webOS system alert. The subtitle and buttons reflect the result:
   Automatically**, and **Show Log**.
 - Lookup unavailable: **Check Again** and **Show Log**, without claiming either state.
 
-The alert buttons relaunch the app with the selected action. If the notification
-service is unavailable, denied, or does not respond, the same state and actions
-are available in an app dialog. The dialog supports the pointer, D-pad, and Enter;
+Native alerts work through a paired connection to the TV's own remote-control
+service (`ws://127.0.0.1:3000`), without root or an external device. On first use,
+approve **Auto Token Refresh** on the TV. The app requests only
+`WRITE_NOTIFICATION_TOAST`, which also permits native alerts on the tested TV.
+It saves the pairing key in its local storage and reuses it on later launches.
+If the TV rejects a revoked key, the app asks to pair again. Clearing app data or
+losing the saved key also requires another approval. The pairing key stays on the
+TV and is never sent to the token-renewal server or written to the app log.
+
+The alert buttons relaunch the app with the selected action. If pairing is
+declined, times out, or the TV remote service is unavailable, the same state and
+actions remain available in an app dialog, with **Retry Native Alerts**.
+The dialog supports the pointer, D-pad, and Enter;
 hidden buttons are skipped. Use Up/Down to scroll an expanded log and Back to
 collapse it. Registration is checked again after adding or removing the token.
+
+Direct `com.webos.notification/createAlert` calls from ordinary apps are denied
+on the tested TV; LG reserves direct notification APIs for system apps. This app
+uses `ssap://system.notifications/createAlert` and `closeAlert` after pairing.
+See [LG's notification guidance](https://webostv.developer.lge.com/develop/guides/notifications).
 
 The helper still reads `/var/luna/preferences/devmode_enabled` and now returns its
 trimmed content and SHA-256 hash. Renewal and removal still POST the token as `key`
@@ -32,7 +47,7 @@ or decrypting a token. After enabling automatic renewal, you can uninstall the a
 Run the regression checks with Node.js 18 or later:
 
 ```sh
-node tests/alert.test.js
+node --test tests/*.test.js
 ```
 
 Package the app and helper with the webOS CLI:
@@ -41,9 +56,15 @@ Package the app and helper with the webOS CLI:
 ares-package ./src/app ./src/service
 ```
 
-LG's webOS TV 26 Simulator 1.5.0 supports the helper and app dialog but does not
-provide `com.webos.notification`. The native alert payload and relaunch actions
-have regression coverage; rendering the actual system alert requires a TV that
-allows this service. For integration tests, use a temporary 64-character hex token
-at the helper's path. If you add it to the server, remove it with `action=remove`
-and verify that a subsequent removal reports that the token is absent.
+The paired route has been verified from the ordinary app context on an LG C2
+running webOS SDK 10.3.1: pairing, native rendering, alert closing, the Show Log
+button, and reconnecting with the saved key. That test TV is rooted, but the alert
+path uses no root helper, elevated permissions, or system modifications. A
+physically unrooted TV and other firmware versions still need compatibility
+testing. The app dialog remains available when the remote interface is absent,
+including simulators without that service.
+
+For integration tests, use a temporary 64-character hex token. Keep any rooted-TV
+test override of the helper's file path outside the shipped source and IPK. If you
+add the test token to the server, remove it afterwards and verify that the status
+endpoint reports it as absent.

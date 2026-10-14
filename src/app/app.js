@@ -1,10 +1,19 @@
 /* Add/remove keep the original server contract; status sends only the key hash. */
 var TOKEN_SERVICE = 'luna://com.pirate.refresh.service';
-var NOTIFICATION_SERVICE = 'luna://com.webos.notification';
 var APP_ID = 'com.pirate.refresh';
 var nativeAlertAvailable = true;
 var nativeAlertId = null;
 var nativeAlertPending = false;
+var nativeAlertGeneration = 0;
+var nativeAlerts = new NativeAlertClient({ onState: function (state) {
+    var status = document.getElementById('native-alert-status');
+    if (state === 'pairing') {
+        status.textContent = 'Allow “Auto Token Refresh” on your TV to enable native alerts. You only need to pair once.';
+        logEvent('Waiting for TV pairing approval…');
+    } else if (state === 'connecting') status.textContent = 'Connecting native alerts…';
+    else if (state === 'connected') status.textContent = '';
+    else if (state === 'storage-unavailable') logEvent('Pairing could not be saved; another approval may be needed next time.');
+} });
 var requestPending = false;
 var statusPending = false;
 var registrationState = 'checking';
@@ -108,6 +117,7 @@ async function checkRegistration(openAlert) {
 function toggleLog(forceOpen) {
     var section = document.getElementById('log-section');
     var open = forceOpen === true || !section.classList.contains('expanded');
+    if (open) closeNativeAlert();
     section.classList.toggle('expanded', open);
     section.setAttribute('aria-hidden', String(!open));
     var button = document.getElementById('toggle-log-btn');
@@ -121,72 +131,69 @@ function alertButton(label, params, focus) {
     return {
         label: label,
         focus: !!focus,
-        onclick: 'luna://com.webos.service.applicationmanager/launch',
+        onclick: 'luna://com.webos.applicationManager/launch',
         params: { id: APP_ID, params: params }
     };
 }
 
-function showNativeAlert(result) {
+async function showNativeAlert(result) {
     if (!libraryReady || !nativeAlertAvailable || nativeAlertPending || !window.token) return;
     if (statusPending || registrationState === 'checking') return;
     if (document.getElementById('log-section').classList.contains('expanded')) return;
     nativeAlertPending = true;
-    var message = '<b>Automatic webOS Token Refresh</b><br/><br/>';
-    message += escapeHTML(stateDescription());
-    if (result) message += '<br/><br/>' + escapeHTML(result);
-    message += '<br/><br/>Your token:<br/>' + escapeHTML(window.token);
-    var info = document.getElementById('info-section').textContent;
-    if (info) message += '<br/><br/>' + escapeHTML(info);
-    var buttons = [];
-    if (registrationState === 'active') buttons.push(alertButton('Stop Auto Renewal', { tokenAction: 'remove' }, true));
-    else if (registrationState === 'inactive') buttons.push(alertButton('Renew Automatically', { tokenAction: 'add' }, true));
-    else buttons.push(alertButton('Check Again', { view: 'status' }, true));
-    buttons.push(alertButton('Show Log', { view: 'log' }));
-    var timer = setTimeout(function () {
-        nativeAlertPending = false;
-        nativeAlertAvailable = false;
-        logEvent('System alert timed out; using the app dialog.');
-        focusButton();
-    }, 2000);
-    function fallback(error) {
-        clearTimeout(timer);
-        nativeAlertPending = false;
-        nativeAlertAvailable = false;
-        logEvent('System alert unavailable; using the app dialog. ' + (error.errorText || error.message || ''));
-        focusButton();
-    }
+    var generation = nativeAlertGeneration;
+    document.getElementById('native-alert-btn').hidden = true;
     try {
-        webOS.service.request(NOTIFICATION_SERVICE, {
-            method: 'createAlert',
-            parameters: {
-                message: message,
-                modal: true,
-                buttons: buttons
-            },
-            onSuccess: function (response) {
-                if (!response.returnValue) return fallback(response);
-                clearTimeout(timer);
-                nativeAlertPending = false;
-                nativeAlertAvailable = true;
-                nativeAlertId = response.alertId;
-                logEvent('System alert opened.');
-            },
-            onFailure: fallback
+        await nativeAlerts.connect();
+        // Pairing can take a minute. Build the message from the current state,
+        // and discard an alert superseded by an action or opening the log.
+        if (generation !== nativeAlertGeneration) return;
+        if (statusPending || requestPending || document.getElementById('log-section').classList.contains('expanded')) return;
+        var message = escapeHTML(stateDescription());
+        if (result) message += '<br/><br/>' + escapeHTML(result);
+        message += '<br/><br/>Your token:<br/>' + escapeHTML(window.token);
+        var info = document.getElementById('info-section').textContent;
+        if (info) message += '<br/><br/>' + escapeHTML(info);
+        var buttons = [];
+        if (registrationState === 'active') buttons.push(alertButton('Stop Auto Renewal', { tokenAction: 'remove' }, true));
+        else if (registrationState === 'inactive') buttons.push(alertButton('Renew Automatically', { tokenAction: 'add' }, true));
+        else buttons.push(alertButton('Check Again', { view: 'status' }, true));
+        buttons.push(alertButton('Show Log', { view: 'log' }));
+        var response = await nativeAlerts.request('createAlert', {
+            title: 'Automatic webOS Token Refresh', message: message, modal: true, buttons: buttons
         });
-    } catch (error) { fallback(error); }
+        if (!response.alertId) throw new Error('The TV returned no alert ID.');
+        if (generation !== nativeAlertGeneration) {
+            nativeAlerts.closeAlert(response.alertId).catch(function () {});
+            return;
+        }
+        nativeAlertId = response.alertId;
+        nativeAlertAvailable = true;
+        document.getElementById('native-alert-status').textContent = '';
+        logEvent('System alert opened through the paired TV connection.');
+    } catch (error) {
+        if (generation !== nativeAlertGeneration) return;
+        nativeAlertAvailable = false;
+        document.getElementById('native-alert-status').textContent = 'Native alerts are unavailable. Use the app buttons or retry pairing.';
+        document.getElementById('native-alert-btn').hidden = false;
+        logEvent('System alert unavailable; using the app dialog. ' + error.message);
+        focusButton();
+    } finally { if (generation === nativeAlertGeneration) nativeAlertPending = false; }
 }
 
 function closeNativeAlert() {
+    nativeAlertGeneration++;
+    nativeAlertPending = false;
     if (!nativeAlertId) return;
     var alertId = nativeAlertId;
     nativeAlertId = null;
-    try {
-        webOS.service.request(NOTIFICATION_SERVICE, {
-            method: 'closeAlert',
-            parameters: { alertId: alertId },
-            onFailure: function (error) { logEvent('System alert close: ' + (error.errorText || error.message || 'already closed')); }
-        });
-    } catch (error) { logEvent('System alert close: ' + error.message); }
+    nativeAlerts.closeAlert(alertId).catch(function (error) { logEvent('System alert close: ' + error.message); });
+}
+
+function retryNativeAlert() {
+    if (document.getElementById('log-section').classList.contains('expanded')) toggleLog();
+    nativeAlertAvailable = true;
+    showNativeAlert();
 }
 
 function fetchToken() {
