@@ -1,0 +1,30 @@
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { width: 100%; height: 100%; margin: 0; }
+body { background: #171717; color: #242424; font-family: "LG Smart UI", Arial, sans-serif; font-size: 1.45vw; }
+#loading-status { position: absolute; top: 45%; width: 100%; padding: 0 12vw; text-align: center; color: #ccc; font-size: 1.3vw; }
+#app-container { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 4vh 0; }
+#main-content { width: 56vw; max-height: 92vh; overflow-y: auto; background: #ededed; padding: 3.4vh 3vw 2.4vh; text-align: center; box-shadow: 0 1vh 4vh rgba(0, 0, 0, .35); }
+h1 { font-size: 2.35vw; font-weight: 500; line-height: 1.2; margin: 0 0 1.6vh; }
+#dialog-description { margin: 0 0 2.8vh; color: #505050; }
+#token-section { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; padding: 1.6vh 0; }
+#token-section p { font-size: 1.1vw; color: #666; margin: 0 0 1vh; }
+#token { display: block; font-family: monospace; font-size: 1.13vw; line-height: 1.6; overflow-wrap: break-word; word-wrap: break-word; }
+#response-section { margin: 1.8vh 0; }
+#response { margin: 0; font-size: 1.4vw; line-height: 1.4; white-space: pre-wrap; overflow-wrap: break-word; }
+#response[data-state="success"] { color: #25713a; }
+#response[data-state="error"] { color: #a31530; }
+#info-section { margin: 0 0 2.6vh; font-size: 1.1vw; line-height: 1.6; color: #666; }
+#native-alert-status { font-size: 1.1vw; line-height: 1.5; color: #666; white-space: pre-line; }
+#button-container { display: flex; flex-direction: column; }
+button { width: 100%; padding: 1.5vh 1vw; margin: .4vh 0; border: 0; border-radius: 0; background: #d7d7d7; color: #262626; font: inherit; font-size: 1.55vw; line-height: 1.4; cursor: pointer; }
+button:hover, button:focus { background: #c6004f; color: #fff; outline: 0; }
+button:focus { box-shadow: inset 0 0 0 2px #a00040; }
+button:disabled { opacity: .55; cursor: default; }
+footer { margin-top: 2vh; font-size: 1vw; color: #767676; }
+footer a { color: inherit; }
+#log-section { display: none; margin-top: 2vh; text-align: left; border-top: 1px solid #ccc; }
+#log-section.expanded { display: block; }
+#log-section h2 { font-size: 1.2vw; font-weight: 500; margin: 1.4vh 0; }
+#log-content { height: 18vh; overflow-y: auto; color: #555; font: 1vw/1.5 monospace; }
+#log-content p { margin: .4vh 0; overflow-wrap: break-word; }
