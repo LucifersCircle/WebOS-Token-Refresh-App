@@ -2,6 +2,7 @@
 [hidden] { display: none !important; }
 html, body { width: 100%; height: 100%; margin: 0; }
 body { background: #171717; color: #242424; font-family: "LG Smart UI", Arial, sans-serif; font-size: 1.45vw; }
+#loading-status { position: absolute; top: 45%; width: 100%; padding: 0 12vw; text-align: center; color: #ccc; font-size: 1.3vw; }
 #app-container { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 4vh 0; }
 #main-content { width: 56vw; max-height: 92vh; overflow-y: auto; background: #ededed; padding: 3.4vh 3vw 2.4vh; text-align: center; box-shadow: 0 1vh 4vh rgba(0, 0, 0, .35); }
 h1 { font-size: 2.35vw; font-weight: 500; line-height: 1.2; margin: 0 0 1.6vh; }

@@ -35,7 +35,7 @@ function fixture(options = {}) {
             click() { return ({ 'renew-btn': context.renewToken, 'remove-btn': context.removeToken, 'retry-btn': context.checkRegistration, 'toggle-log-btn': context.toggleLog, 'native-alert-btn': context.retryNativeAlert })[id](); }
         };
     }
-    ['native-alert-status', 'token', 'response', 'log-content', 'log-section', 'dialog-description', 'info-section', 'renew-btn', 'remove-btn', 'retry-btn', 'toggle-log-btn', 'native-alert-btn'].forEach(id => elements.set(id, element(id)));
+    ['loading-status', 'app-container', 'native-alert-status', 'token', 'response', 'log-content', 'log-section', 'dialog-description', 'info-section', 'renew-btn', 'remove-btn', 'retry-btn', 'toggle-log-btn', 'native-alert-btn'].forEach(id => elements.set(id, element(id)));
     elements.get('native-alert-btn').hidden = true;
     let approvePairing;
     const pairing = options.pairingPending ? new Promise(resolve => { approvePairing = resolve; }) : Promise.resolve();
@@ -139,13 +139,16 @@ test('native alert offers the original actions and Show Log through app relaunch
     await flush();
     assert.equal(new URLSearchParams(app.mutations()[1].init.body).get('action'), 'remove');
     app.events.webOSRelaunch({ detail: payload.buttons[1].params.params });
-    assert.equal(app.elements.get('log-section').attributes['aria-hidden'], 'false');
+    await flush();
+    assert.match(app.calls.filter(call => call.spec.method === 'createAlert').at(-1).spec.parameters.title, /Log/);
+    assert.equal(app.elements.get('app-container').hidden, true);
 });
 
 test('native permission denial preserves the state-appropriate fallback action', async () => {
     const app = fixture({ registered: true, nativeDenied: true });
     await app.load();
     assert.equal(app.context.nativeAlertAvailable, false);
+    assert.equal(app.elements.get('app-container').hidden, false);
     await app.context.removeToken();
     assert.equal(new URLSearchParams(app.mutations()[0].init.body).get('action'), 'remove');
     assert.equal(app.elements.get('response').textContent, 'token removed successfully');
@@ -350,14 +353,16 @@ test('pairing completion uses the latest registration state without duplicate al
     assert.deepEqual(Array.from(alerts[0].spec.parameters.buttons, button => button.label), ['Stop Auto Renewal', 'Show Log']);
 });
 
-test('opening the log while pairing suppresses the delayed native alert', async () => {
+test('opening the native log while pairing suppresses the stale status alert', async () => {
     const app = fixture({ pairingPending: true });
     await app.load();
-    app.context.toggleLog(true);
+    app.context.showNativeLog();
     app.approvePairing();
     await flush();
-    assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, 0);
-    assert.equal(app.elements.get('log-section').attributes['aria-hidden'], 'false');
+    const alerts = app.calls.filter(call => call.spec.method === 'createAlert');
+    assert.equal(alerts.length, 1);
+    assert.match(alerts[0].spec.parameters.title, /Log/);
+    assert.equal(app.elements.get('app-container').hidden, true);
     assert.equal(app.context.nativeAlertPending, false);
 });
 
@@ -372,4 +377,32 @@ test('native failure exposes retry and a successful retry restores native alerts
     assert.equal(app.context.nativeAlertAvailable, true);
     assert.equal(app.elements.get('native-alert-btn').hidden, true);
     assert.equal(app.context.nativeAlertId, 'test-alert');
+});
+
+test('native status and log dialogs keep fallback hidden and support native Back', async () => {
+    const app = fixture();
+    await app.load();
+    assert.equal(app.elements.get('app-container').hidden, true);
+    assert.equal(app.elements.get('loading-status').hidden, true);
+    app.events.webOSRelaunch({ detail: { view: 'log' } });
+    await flush();
+    const log = app.calls.filter(call => call.spec.method === 'createAlert').at(-1).spec.parameters;
+    assert.match(log.title, /Log/);
+    assert.deepEqual(Array.from(log.buttons, button => button.label), ['Back', 'Refresh Log']);
+    assert.equal(app.elements.get('app-container').hidden, true);
+    app.events.webOSRelaunch({ detail: log.buttons[0].params.params });
+    await flush();
+    const status = app.calls.filter(call => call.spec.method === 'createAlert').at(-1).spec.parameters;
+    assert.deepEqual(Array.from(status.buttons, button => button.label), ['Renew Automatically', 'Show Log']);
+    assert.equal(app.elements.get('app-container').hidden, true);
+});
+
+test('reopening a running app without an action shows its native status again', async () => {
+    const app = fixture();
+    await app.load();
+    const before = app.calls.filter(call => call.spec.method === 'createAlert').length;
+    app.events.webOSRelaunch({ detail: {} });
+    await flush();
+    assert.equal(app.calls.filter(call => call.spec.method === 'createAlert').length, before + 1);
+    assert.equal(app.elements.get('app-container').hidden, true);
 });

@@ -23,6 +23,9 @@ TV and is never sent to the token-renewal server or written to the app log.
 The alert buttons relaunch the app with the selected action. If pairing is
 declined, times out, or the TV remote service is unavailable, the same state and
 actions remain available in an app dialog, with **Retry Native Alerts**.
+While native alerts work, the fallback card is hidden. **Show Log** opens another
+native alert with the eight most recent log entries, **Back**, and **Refresh Log**.
+Long entries are shortened to fit the TV dialog; the fallback log retains them.
 The dialog supports the pointer, D-pad, and Enter;
 hidden buttons are skipped. Use Up/Down to scroll an expanded log and Back to
 collapse it. Registration is checked again after adding or removing the token.
