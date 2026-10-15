@@ -21,6 +21,8 @@ var requestPending = false;
 var statusPending = false;
 var registrationState = 'checking';
 var keyHash = null;
+var tokenPending = false;
+var tokenError = null;
 var libraryReady = false;
 var pendingLaunch = null;
 // The token element's ID is also exposed as a window property by browsers.
@@ -54,7 +56,13 @@ function focusButton(id) {
     if (button) button.focus();
 }
 
+function isRootedTV() {
+    return !!tokenError && /\bEISDIR\b/i.test(tokenError);
+}
+
 function stateDescription() {
+    if (isRootedTV()) return 'Your TV is rooted and does not need Developer Mode token renewal. You can uninstall this app.';
+    if (tokenError) return 'Developer Mode token unavailable.';
     return {
         checking: 'Checking automatic renewal…',
         active: 'Your token is already being renewed automatically.',
@@ -64,15 +72,21 @@ function stateDescription() {
 }
 
 function renderRegistration() {
+    var rooted = isRootedTV();
     document.getElementById('dialog-description').textContent = stateDescription();
+    document.getElementById('token-section').hidden = rooted;
+    document.getElementById('response-section').hidden = rooted;
+    document.getElementById('native-alert-status').hidden = rooted;
+    document.getElementById('dismiss-btn').hidden = !rooted;
     var renew = document.getElementById('renew-btn');
     var remove = document.getElementById('remove-btn');
     var retry = document.getElementById('retry-btn');
     renew.hidden = registrationState !== 'inactive';
     remove.hidden = registrationState !== 'active';
-    retry.hidden = registrationState !== 'unknown';
-    renew.disabled = remove.disabled = requestPending || statusPending;
-    retry.disabled = statusPending || requestPending || !window.token || !keyHash;
+    retry.hidden = rooted || registrationState !== 'unknown';
+    renew.disabled = remove.disabled = tokenPending || requestPending || statusPending;
+    retry.textContent = tokenError ? 'Retry Token' : 'Check Again';
+    retry.disabled = tokenPending || statusPending || requestPending || (!tokenError && (!window.token || !keyHash));
     document.getElementById('info-section').textContent = registrationState === 'active'
         ? 'You can uninstall this app. Your token will continue to be refreshed automatically.'
         : registrationState === 'inactive'
@@ -104,6 +118,15 @@ function checkRegistration(openAlert) {
         if (openAlert !== false) showNativeAlert();
         return registrationState !== 'unknown';
     });
+}
+
+function retryStatus() {
+    if (isRootedTV()) return showNativeAlert();
+    if (tokenError) {
+        nativeView = 'status';
+        return fetchToken();
+    }
+    return checkRegistration();
 }
 
 function toggleLog(forceOpen) {
@@ -148,7 +171,7 @@ function showNativeLog() {
 
 function showNativeDialog(view, result) {
     if (!nativeAlertAvailable || nativeAlertPending) return Promise.resolve();
-    if (view === 'status' && (!libraryReady || !window.token || statusPending || registrationState === 'checking')) return Promise.resolve();
+    if (view === 'status' && (!libraryReady || tokenPending || statusPending || registrationState === 'checking')) return Promise.resolve();
     nativeAlertPending = true;
     var generation = nativeAlertGeneration;
     document.getElementById('native-alert-btn').hidden = true;
@@ -170,15 +193,19 @@ function showNativeDialog(view, result) {
         } else {
             title = 'Automatic webOS Token Refresh';
             message = escapeHTML(stateDescription());
-            if (result) message += '<br/><br/>' + escapeHTML(result);
-            message += '<br/><br/>Your token:<br/>' + escapeHTML(window.token);
-            var info = document.getElementById('info-section').textContent;
-            if (info) message += '<br/><br/>' + escapeHTML(info);
             buttons = [];
-            if (registrationState === 'active') buttons.push(alertButton('Stop Auto Renewal', { tokenAction: 'remove' }, true));
-            else if (registrationState === 'inactive') buttons.push(alertButton('Renew Automatically', { tokenAction: 'add' }, true));
-            else buttons.push(alertButton('Check Again', { view: 'status' }, true));
-            buttons.push(alertButton('Show Log', { view: 'log' }));
+            if (!isRootedTV()) {
+                if (result) message += '<br/><br/>' + escapeHTML(result);
+                if (tokenError) message += '<br/><br/>' + escapeHTML(tokenError);
+                else message += '<br/><br/>Your token:<br/>' + escapeHTML(window.token);
+                var info = document.getElementById('info-section').textContent;
+                if (info) message += '<br/><br/>' + escapeHTML(info);
+                if (tokenError) buttons.push(alertButton('Retry Token', { view: 'status', retryToken: true }, true));
+                else if (registrationState === 'active') buttons.push(alertButton('Stop Auto Renewal', { tokenAction: 'remove' }, true));
+                else if (registrationState === 'inactive') buttons.push(alertButton('Renew Automatically', { tokenAction: 'add' }, true));
+                else buttons.push(alertButton('Check Again', { view: 'status' }, true));
+            }
+            buttons.push(alertButton('Show Log', { view: 'log' }, buttons.length === 0));
         }
         buttons.push(alertButton('Dismiss', { view: 'dismiss' }));
         return nativeAlerts.request('createAlert', {
@@ -206,7 +233,7 @@ function showNativeDialog(view, result) {
         document.getElementById('native-alert-status').textContent = error.pairingFailed
             ? error.message + '\n\nSelect “Request TV Permission” to show the TV’s pairing prompt again, then approve “Auto Token Refresh” on your TV. The app requests notification permission so it can display native status and log dialogs. Approval is saved on this TV for future launches.\n\nThis does not enable or stop automatic token renewal. You can still use the renewal buttons below without pairing.'
             : 'Native dialogs could not connect or respond. Select “Retry Native Dialogs” to reconnect. Any saved TV approval will be reused. You can also use the app buttons below.';
-        retry.hidden = false;
+        retry.hidden = isRootedTV();
         logEvent('System alert unavailable; using the app dialog. ' + error.message);
         showFallback(view === 'log');
         focusButton();
@@ -236,56 +263,67 @@ function retryNativeAlert() {
     showNativeAlert();
 }
 
+function showLoadedTokenState() {
+    if (nativeView === 'dismiss') return;
+    var params = pendingLaunch;
+    pendingLaunch = null;
+    if (params && !tokenError) handleLaunch(params);
+    else if (nativeView === 'log') showNativeLog();
+    else showNativeAlert();
+}
+
 function fetchToken() {
+    if (tokenPending || requestPending || statusPending || nativeView === 'dismiss') return;
+    closeNativeAlert();
+    tokenPending = true;
+    tokenError = null;
+    window.token = null;
+    keyHash = null;
+    registrationState = 'checking';
+    renderRegistration();
     var tokenElement = document.getElementById('token');
     tokenElement.textContent = 'Fetching token from /var/luna/preferences/devmode_enabled';
     logEvent('Starting token fetch…');
+    var settled = false;
     var timeout = setTimeout(function () {
-        tokenElement.textContent = 'Token fetch timed out.';
-        logEvent('Token fetch timed out.');
-        showFallback(nativeView === 'log');
-        registrationState = 'unknown';
-        renderRegistration();
+        finish('Token fetch timed out.');
     }, 5000);
-    function fail(message) {
+    function finish(message, response) {
+        if (settled || nativeView === 'dismiss') return;
+        settled = true;
         clearTimeout(timeout);
-        tokenElement.textContent = message;
-        logEvent(message);
-        showFallback(nativeView === 'log');
-        registrationState = 'unknown';
-        renderRegistration();
+        tokenPending = false;
+        if (message) {
+            tokenError = message;
+            tokenElement.textContent = message;
+            logEvent(message);
+            registrationState = 'unknown';
+            renderRegistration();
+            showLoadedTokenState();
+            return;
+        }
+        window.token = response.content;
+        keyHash = response.keyHash;
+        tokenElement.textContent = window.token;
+        logEvent('Token retrieved successfully.');
+        checkRegistration(false).then(showLoadedTokenState);
     }
     try {
         webOS.service.request(TOKEN_SERVICE, {
             method: 'readFile',
             onSuccess: function (response) {
-                clearTimeout(timeout);
-                if (!response.returnValue) return fail('Error: ' + response.errorText);
-                if (typeof response.content !== 'string') return fail('The token helper returned invalid content.');
-                window.token = response.content.trim();
-                keyHash = response.keyHash;
-                if (!window.token) return fail('Developer mode token file is empty.');
-                tokenElement.textContent = window.token;
-                logEvent('Token retrieved successfully.');
-                if (typeof keyHash !== 'string' || !/^[a-f0-9]{64}$/.test(keyHash)) {
-                    keyHash = null;
-                    registrationState = 'unknown';
-                    renderRegistration();
-                    logEvent('The token helper did not provide a SHA-256 hash. Update the app and helper together.');
-                    showFallback(nativeView === 'log');
-                    return;
+                if (!response || !response.returnValue) return finish('Error: ' + (response && response.errorText || 'Service call failed.'));
+                if (typeof response.content !== 'string') return finish('The token helper returned invalid content.');
+                var token = response.content.trim();
+                if (!token) return finish('Developer mode token file is empty.');
+                if (typeof response.keyHash !== 'string' || !/^[a-f0-9]{64}$/.test(response.keyHash)) {
+                    return finish('The token helper did not provide a SHA-256 hash. Update the app and helper together.');
                 }
-                checkRegistration(false).then(function () {
-                    if (pendingLaunch) {
-                        var params = pendingLaunch;
-                        pendingLaunch = null;
-                        handleLaunch(params);
-                    } else { showNativeAlert(); }
-                });
+                finish(null, { content: token, keyHash: response.keyHash });
             },
-            onFailure: function (error) { fail('Error fetching token: ' + (error.errorText || error.message || 'Service call failed.')); }
+            onFailure: function (error) { finish('Error fetching token: ' + (error && (error.errorText || error.message) || 'Service call failed.')); }
         });
-    } catch (error) { fail('Exception fetching token: ' + error.message); }
+    } catch (error) { finish('Exception fetching token: ' + error.message); }
 }
 
 function createPayload(action) {
@@ -354,8 +392,14 @@ function handleLaunch(params) {
     if (params.tokenAction !== 'add' && params.tokenAction !== 'remove' && params.view !== 'log' && params.view !== 'status') return;
     if (params.view === 'log') { showNativeLog(); return; }
     nativeView = 'status';
-    if (!libraryReady || !window.token || statusPending || registrationState === 'checking') { pendingLaunch = params; return; }
-    if (params.view === 'status') { checkRegistration(); return; }
+    if (!libraryReady || tokenPending || statusPending || registrationState === 'checking') { pendingLaunch = params; return; }
+    if (params.view === 'status') {
+        if (tokenError) {
+            if (params.retryToken) retryStatus();
+            else showNativeAlert();
+        } else checkRegistration();
+        return;
+    }
     closeNativeAlert();
     if ((params.tokenAction === 'add' && registrationState === 'inactive') ||
         (params.tokenAction === 'remove' && registrationState === 'active')) sendRequest(params.tokenAction);

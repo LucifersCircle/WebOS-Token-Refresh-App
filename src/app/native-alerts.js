@@ -71,7 +71,7 @@
                         pairingType: 'PROMPT',
                         manifest: {
                             manifestVersion: 1,
-                            appVersion: '1.0.3',
+                            appVersion: '1.0.5',
                             appId: 'com.pirate.refresh',
                             vendorId: 'LucifersCircle',
                             localizedAppNames: { '': 'Auto Token Refresh' },

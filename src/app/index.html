@@ -27,9 +27,10 @@
             <div id="button-container">
                 <button id="renew-btn" type="button" hidden onclick="renewToken()">Renew Automatically</button>
                 <button id="remove-btn" type="button" hidden onclick="removeToken()">Stop Auto Renewal</button>
-                <button id="retry-btn" type="button" hidden onclick="checkRegistration()">Check Again</button>
+                <button id="retry-btn" type="button" hidden onclick="retryStatus()">Check Again</button>
                 <button id="toggle-log-btn" type="button" aria-controls="log-section" aria-expanded="false" onclick="toggleLog()">Show Log</button>
                 <button id="native-alert-btn" type="button" hidden onclick="retryNativeAlert()">Retry Native Dialogs</button>
+                <button id="dismiss-btn" type="button" hidden onclick="dismissApp()">Dismiss</button>
             </div>
             <section id="log-section" aria-label="App log" aria-hidden="true">
                 <h2>App Log</h2>
